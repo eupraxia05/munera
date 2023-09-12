@@ -58,13 +58,17 @@ fn ui_callback(context: &Context, registry: Rc<RefCell<Registry>>, ed_context: R
     });
 }
 
-fn main() {
+pub fn run_editor() {
     let registry = Rc::new(RefCell::new(Registry::new()));
     let ed_context = Rc::new(RefCell::new(EditorContext::new()));
 
     let mut gfx = gfx::GfxRuntime::new();
     gfx.get_egui().set_ui_callback(move |ctx| ui_callback(ctx, registry.clone(), ed_context.clone()));
     gfx.window_loop();
+}
+
+fn main() {
+    run_editor();
 }
 
 #[cfg(test)]
