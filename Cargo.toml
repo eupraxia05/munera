@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "munera"
-crate-type = ["dylib"]
+crate-type = ["lib"]
 
 [dependencies]
 bytemuck = "1.14.0"
