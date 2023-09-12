@@ -2,8 +2,68 @@ pub mod ecs;
 pub mod gfx;
 pub mod math;
 
+use egui::{Context, epaint::Hsva, Response};
+use ecs::*;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+struct EditorContext {
+    selected_ent: Option<EntId>,
+    test_str: String
+}
+
+impl EditorContext {
+    pub fn new() -> Self {
+        EditorContext { selected_ent: None, test_str: String::from("") }
+    }
+}
+
+fn ui_callback(context: &Context, registry: Rc<RefCell<Registry>>, ed_context: Rc<RefCell<EditorContext>>) {
+    egui::Window::new("Editor").show(context, |ui| 
+    {
+        let mut reg = registry.borrow_mut();
+        let mut ed = ed_context.borrow_mut();
+
+        ui.text_edit_singleline(&mut ed.test_str);
+
+        if ui.button("Add Ent").clicked() {
+            reg.new_ent();
+        }
+
+        reg.iter().for_each(|ent| {
+            let ent_str = if let Some(name) = reg.get_comp::<NameComp>(&ent) {
+                format!("{}: {}", ent.0, name.borrow().0)
+            } else {
+                format!("{}: Unnamed", ent.0)
+            };
+
+            let is_selected = ed.selected_ent.is_some() && ed.selected_ent.as_mut().unwrap().0 == ent.0;
+
+            if ui.selectable_label(is_selected, ent_str).clicked() {
+                ed.selected_ent = Some(ent);
+            }
+        });
+
+        ui.separator();
+
+        if let Some(selected_ent) = ed.selected_ent.as_ref() {
+            if let Some(name) = reg.get_comp::<NameComp>(&selected_ent) {
+                ui.text_edit_singleline(&mut name.borrow_mut().0);
+            } else {
+                if ui.button("Add Name").clicked() {
+                    reg.add_comp::<NameComp>(selected_ent, NameComp::new(""));
+                }
+            }
+        }
+    });
+}
+
 fn main() {
+    let registry = Rc::new(RefCell::new(Registry::new()));
+    let ed_context = Rc::new(RefCell::new(EditorContext::new()));
+
     let mut gfx = gfx::GfxRuntime::new();
+    gfx.get_egui().set_ui_callback(move |ctx| ui_callback(ctx, registry.clone(), ed_context.clone()));
     gfx.window_loop();
 }
 

@@ -8,19 +8,21 @@
       "type": "lldb",
       "request": "launch",
       "name": "Debug executable 'munera'",
-      "cargo": {
+      "program": "${workspaceRoot}/target/debug/munera",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "sourceLanguages": [
+        "rust"
+      ],
+      "cargo":{
         "args": [
-          "run",
-          "--bin=munera",
-          "--package=munera"
+          "build",
+          "--bin=munera"
         ],
         "filter": {
-          "name": "munera",
           "kind": "bin"
         }
-      },
-      "args": [],
-      "cwd": "${workspaceFolder}"
+      }
     },
     {
       "type": "lldb",

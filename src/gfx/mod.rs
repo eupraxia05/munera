@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 use std::result::Result;
 use fermium::prelude::*;
 use fermium::*;
@@ -17,7 +17,8 @@ pub struct GfxRuntime {
   gl_context: SDL_GLContext,
   vao: GLuint,
   vbo: GLuint,
-  egui: EguiIntegration
+  egui: EguiIntegration<'static>,
+  shader_program: GLuint
 }
 
 impl GfxRuntime {
@@ -36,13 +37,17 @@ impl GfxRuntime {
       gl::load_with(|s| SDL_GL_GetProcAddress(
         CString::new(s).unwrap().as_ptr()));
 
+      gl::Enable(gl::DEBUG_OUTPUT);
+      gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+      gl::DebugMessageCallback(Some(Self::debug_message_callback), std::ptr::null());
+
       let mut vao: GLuint = 0;
       gl::GenVertexArrays(1, &mut vao);
 
       let mut vbo: GLuint = 0;
       gl::GenBuffers(1, &mut vbo);
 
-      gl::ClearColor(0.2, 0.3, 0.3, 1.0);
+      gl::ClearColor(0.05, 0.05, 0.05, 1.0);
       gl::BindVertexArray(vao);
       gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
@@ -123,30 +128,59 @@ impl GfxRuntime {
       let egui = EguiIntegration::new();
 
       return GfxRuntime { window: window, gl_context: gl_context, vao: vao,
-        vbo: vbo, egui: egui };
+        vbo: vbo, egui: egui, shader_program: shader_program };
     }
+  }
+
+  extern "system" fn debug_message_callback(source: GLenum, msg_type: GLenum, id: GLuint, severity: GLenum, length: GLsizei,
+    message: *const i8, user_param: *mut c_void) {
+      if severity == gl::DEBUG_SEVERITY_NOTIFICATION {
+        return;
+      }
+      
+      let severity_str = if severity == gl::DEBUG_SEVERITY_LOW {
+        "message"
+      } else if severity == gl::DEBUG_SEVERITY_MEDIUM {
+        "warning"
+      } else {
+        "error"
+      };
+
+      unsafe { println!("OpenGL {}: {:?}", severity_str, CStr::from_ptr(message)); }
+      assert!(severity != gl::DEBUG_SEVERITY_HIGH);
   }
 
   pub fn window_loop(&mut self) {
     'main_loop : loop {
       unsafe {
+        let mut events = Vec::<SDL_Event>::new();
         let mut event = SDL_Event::default();
         while SDL_PollEvent(&mut event) == 1 {
           if event.type_.0 == SDL_WINDOWEVENT.0 {
             if event.window.event.0 == SDL_WINDOWEVENT_CLOSE.0 {
               break 'main_loop;
             }
+          } else if event.type_.0 == SDL_MOUSEBUTTONDOWN.0
+            || event.type_.0 == SDL_MOUSEBUTTONUP.0
+            || event.type_.0 == SDL_MOUSEMOTION.0
+            || event.type_.0 == SDL_KEYDOWN.0
+            || event.type_.0 == SDL_KEYUP.0
+            || event.type_.0 == SDL_TEXTINPUT.0 {
+              events.push(event);
           }
         }
 
         gl::Clear(gl::COLOR_BUFFER_BIT);
-        gl::DrawArrays(gl::TRIANGLES, 0, 3);
 
-        self.egui.run(self.window);
+        self.egui.run(self.window, &events);
 
         SDL_GL_SwapWindow(self.window);
       }
     }
+  }
+
+  pub fn get_egui(&mut self) -> &mut EguiIntegration<'static> {
+    &mut self.egui
   }
 }
 

@@ -5,7 +5,9 @@ use std::string::String;
 use std::rc::Rc;
 use std::ops::Deref;
 
-pub struct EntId(usize);
+use gl::GetNamedBufferPointerv;
+
+pub struct EntId(pub usize);
 
 struct CompStorage<CompType>(RefCell<Vec<Option<Rc<RefCell<CompType>>>>>);
 
@@ -171,18 +173,35 @@ impl Registry {
     false
   }
 
-  pub fn borrow_comp_vec_mut<CompType: 'static>(&self)
-    -> Option<RefMut<Vec<Option<CompType>>>> {
-      for comp_vec in self.comp_vecs.iter() {
-        if let Some(comp_vec) = comp_vec.as_any()
-          .downcast_ref::<RefCell<Vec<Option<CompType>>>>()
-        {
-          return Some(comp_vec.borrow_mut());
-        }
-      }
+  pub fn iter(&self) -> RegistryIterator {
+    RegistryIterator::new(self)
+  }
+}
 
-      None
+pub struct RegistryIterator<'a> {
+  ent: usize,
+  reg: &'a Registry
+}
+
+impl<'a> RegistryIterator<'a> {
+  fn new(reg: &'a Registry) -> Self {
+    Self { ent: 0, reg: reg }
+  }
+}
+
+impl<'a> Iterator for RegistryIterator<'a> {
+  type Item = EntId;
+
+  fn next (&mut self) -> Option<Self::Item> {
+    while self.ent < self.reg.num_ents {
+      self.ent += 1;
+      if self.reg.has_ent(&EntId(self.ent)){
+        return Some(EntId(self.ent));
+      }
     }
+    
+    None
+  }
 }
 
 pub struct NameComp(pub String);
