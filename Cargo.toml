@@ -5,10 +5,17 @@ edition = "2021"
 
 [lib]
 name = "munera"
-crate-type = ["lib"]
+path = "src/lib.rs"
+crate-type = ["rlib"]
 
 [dependencies]
 bytemuck = "1.14.0"
 gl = "0.14.0"
 fermium = "22605.0.0"
 egui = "0.22.0"
+serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.106"
+hecs = { version = "0.10.3", features = ["row-serialize"] }
+mac = { path = "mac" }
+egui_extras = { version = "0.22.0", features = ["image"] }
+image = { version = "0.24.7", default-features = false, features = ["png", "jpeg", "bmp"] }

@@ -1,5 +1,6 @@
 use std::ffi::{CString, CStr};
 use std::result::Result;
+use egui::Context;
 use fermium::prelude::*;
 use fermium::*;
 use fermium::video::*;
@@ -17,19 +18,21 @@ pub struct GfxRuntime {
   gl_context: SDL_GLContext,
   vao: GLuint,
   vbo: GLuint,
-  egui: EguiIntegration<'static>,
-  shader_program: GLuint
+  egui: EguiIntegration,
+  shader_program: GLuint,
+  should_quit: bool,
+  events: Vec<SDL_Event>
 }
 
 impl GfxRuntime {
-  pub fn new() -> GfxRuntime {
+  pub fn new() -> Self {
     unsafe { 
       SDL_Init(SDL_INIT_EVERYTHING);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
 
       let window = SDL_CreateWindow(CString::new("Munera").unwrap().as_ptr(), 
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, 
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1920, 1080, 
         SDL_WINDOW_OPENGL.0);
 
       let gl_context = SDL_GL_CreateContext(window);
@@ -127,8 +130,16 @@ impl GfxRuntime {
 
       let egui = EguiIntegration::new();
 
-      return GfxRuntime { window: window, gl_context: gl_context, vao: vao,
-        vbo: vbo, egui: egui, shader_program: shader_program };
+      return GfxRuntime { 
+        window, 
+        gl_context, 
+        vao,
+        vbo, 
+        egui, 
+        shader_program,
+        should_quit: false,
+        events: Vec::new()
+      };
     }
   }
 
@@ -150,46 +161,40 @@ impl GfxRuntime {
       assert!(severity != gl::DEBUG_SEVERITY_HIGH);
   }
 
-  pub fn window_loop(&mut self) {
-    'main_loop : loop {
-      unsafe {
-        let mut events = Vec::<SDL_Event>::new();
-        let mut event = SDL_Event::default();
-        while SDL_PollEvent(&mut event) == 1 {
-          if event.type_.0 == SDL_WINDOWEVENT.0 {
-            if event.window.event.0 == SDL_WINDOWEVENT_CLOSE.0 {
-              break 'main_loop;
-            }
-          } else if event.type_.0 == SDL_MOUSEBUTTONDOWN.0
-            || event.type_.0 == SDL_MOUSEBUTTONUP.0
-            || event.type_.0 == SDL_MOUSEMOTION.0
-            || event.type_.0 == SDL_KEYDOWN.0
-            || event.type_.0 == SDL_KEYUP.0
-            || event.type_.0 == SDL_TEXTINPUT.0 {
-              events.push(event);
+  pub fn begin_frame(&mut self) {
+    unsafe {
+      self.events.clear();
+      let mut event = SDL_Event::default();
+      while SDL_PollEvent(&mut event) == 1 {
+        if event.type_.0 == SDL_WINDOWEVENT.0 {
+          if event.window.event.0 == SDL_WINDOWEVENT_CLOSE.0 {
+            self.should_quit = true;
           }
+        } else if event.type_.0 == SDL_MOUSEBUTTONDOWN.0
+          || event.type_.0 == SDL_MOUSEBUTTONUP.0
+          || event.type_.0 == SDL_MOUSEMOTION.0
+          || event.type_.0 == SDL_KEYDOWN.0
+          || event.type_.0 == SDL_KEYUP.0
+          || event.type_.0 == SDL_TEXTINPUT.0 {
+            self.events.push(event);
         }
-
-        gl::Clear(gl::COLOR_BUFFER_BIT);
-
-        self.egui.run(self.window, &events);
-
-        SDL_GL_SwapWindow(self.window);
       }
+
+      gl::Clear(gl::COLOR_BUFFER_BIT);
     }
   }
 
-  pub fn get_egui(&mut self) -> &mut EguiIntegration<'static> {
+  pub fn end_frame(&mut self, ui_callback: impl FnOnce(&Context)) {
+    self.egui.run(self.window, &self.events, ui_callback);
+
+    unsafe { SDL_GL_SwapWindow(self.window) }
+  }
+
+  pub fn should_quit(&self) -> bool {
+    self.should_quit
+  }
+
+  pub fn get_egui(&mut self) -> &mut EguiIntegration {
     &mut self.egui
   }
-}
-
-pub fn init() -> Result<GfxRuntime, ()> {
-  let runtime = GfxRuntime::new();
-
-  return Ok(runtime);
-}
-
-pub fn compile_shader(stage: GLenum, source: &str) {
-  
 }

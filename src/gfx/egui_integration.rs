@@ -19,8 +19,9 @@ use fermium::scancode::*;
 use fermium::prelude::*;
 use egui::Key;
 use std::ffi::CStr;
+use std::ops::FnMut;
 
-pub struct EguiIntegration<'a> {
+pub struct EguiIntegration {
   ctx: Context,
   textures: HashMap<TextureId, GLuint>,
   program: GLuint,
@@ -32,10 +33,9 @@ pub struct EguiIntegration<'a> {
   vao: GLuint,
   vbo: GLuint,
   element_array_buffer: GLuint,
-  ui_callback: Option<Box<dyn Fn(&Context) -> () + 'a>>,
 }
 
-impl<'a> EguiIntegration<'a> {
+impl EguiIntegration {
   pub fn new() -> Self {
     let vert_shader = compile_shader(gl::VERTEX_SHADER, include_str!("../../shd/egui.vert"));
     let frag_shader = compile_shader(gl::FRAGMENT_SHADER, include_str!("../../shd/egui.frag"));
@@ -91,7 +91,6 @@ impl<'a> EguiIntegration<'a> {
         vao: vao,
         vbo: vbo,
         element_array_buffer: element_array_buffer,
-        ui_callback: None
       };
     }
   }
@@ -178,7 +177,7 @@ impl<'a> EguiIntegration<'a> {
     })
   }
 
-  pub fn run(&mut self, window: *mut SDL_Window, events: &Vec<SDL_Event>) {
+  pub fn run(&mut self, window: *mut SDL_Window, events: &Vec<SDL_Event>, ui_callback: impl FnOnce(&Context)) {
     let mut raw_input = RawInput::default();
     let mut w : c_int = 0;
     let mut h : c_int = 0;
@@ -240,7 +239,7 @@ impl<'a> EguiIntegration<'a> {
       }
     }
 
-    let full_output = self.ctx.run(raw_input, |ctx| { if let Some(func) = &self.ui_callback { func(ctx) } });
+    let full_output = self.ctx.run(raw_input, ui_callback);
 
     for delta in full_output.textures_delta.set {
       self.set_texture(delta.0, &delta.1)
@@ -410,10 +409,6 @@ impl<'a> EguiIntegration<'a> {
 
       assert!(gl::GetError() == gl::NO_ERROR);
     }
-  }
-
-  pub fn set_ui_callback(&mut self, func: impl Fn(&Context) -> () + 'a) {
-    self.ui_callback = Some(Box::new(func));
   }
 }
 
