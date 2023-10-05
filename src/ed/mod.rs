@@ -1,10 +1,15 @@
 use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText};
+use image::{ImageBuffer, EncodableLayout};
 
 use crate::eng::Engine;
+use std::io::Write;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use egui_extras::RetainedImage;
 use std::fs;
+use image::io::Reader as ImageReader;
+use image::Rgba;
+use std::fs::File;
 
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
@@ -192,18 +197,23 @@ impl Tool for AssetBrowserTool {
 
       let mut ass_type = None;
       'handler_loop: for handler in &self.import_handlers {
-        for extension in handler.extensions() {
+        for (idx, extension) in handler.extensions().iter().enumerate() {
           if self.import_path.ends_with(extension) {
-            ass_type = Some(handler.name());
+            ass_type = Some(idx);
             break 'handler_loop
           }
         }
       }
 
       if ass_type.is_some() {
-        ui.label(ass_type.unwrap());
+        ui.label(self.import_handlers[ass_type.unwrap()].name());
       } else {
         ui.label("Unsupported");
+      }
+
+      if ui.button("Import").clicked() && ass_type.is_some() {
+        let handler = &self.import_handlers[ass_type.unwrap()];
+        handler.import(&self.import_path, &self.target_path);
       }
     });
 
@@ -265,6 +275,7 @@ impl Dockable for PlayDockable {
 trait ImportHandler {
   fn name(&self) -> &'static str;
   fn extensions(&self) -> &[&'static str];
+  fn import(&self, import_path: &String, target_path: &String);
 }
 
 struct ImageImportHandler;
@@ -275,6 +286,17 @@ impl ImageImportHandler {
   }
 }
 
+struct ImageImportSerializeHelper<'a> {
+  img: &'a ImageBuffer<Rgba<u8>, Vec<u8>>
+}
+
+impl<'a> serde_binary::Encode for ImageImportSerializeHelper<'a> {
+  fn encode(&self, ser: &mut serde_binary::Serializer) -> serde_binary::Result<()> {
+    ser.writer.write_bytes(self.img.as_bytes());
+    Ok(())
+  }
+}
+
 impl ImportHandler for ImageImportHandler {
   fn name(&self) -> &'static str {
     "Image"
@@ -282,6 +304,25 @@ impl ImportHandler for ImageImportHandler {
 
   fn extensions(&self) -> &[&'static str] {
     &[".png", ".jpg", ".bmp", ".tga", ".exr", ".hdr"]
+  }
+
+  fn import(&self, import_path: &String, target_path: &String) {
+    let open = ImageReader::open(import_path);
+    if open.is_ok() {
+      let decode = open.unwrap().decode();
+      if decode.is_ok() {
+        let img = decode.unwrap();
+        let rgba = img.as_rgba8();
+        if rgba.is_some() {
+          let enc = serde_binary::encode(&ImageImportSerializeHelper{img: &rgba.unwrap()}, 
+            serde_binary::binary_stream::Endian::Little);
+          let mut file = File::create(target_path);
+          if file.is_ok() && enc.is_ok() {
+            file.unwrap().write_all(&enc.unwrap());
+          }
+        }
+      }
+    }
   }
 }
 
@@ -300,5 +341,9 @@ impl ImportHandler for MeshImportHandler {
 
   fn extensions(&self) -> &[&'static str] {
     &[".gltf", ".fbx", ".obj"]
+  }
+
+  fn import(&self, import_path: &String, target_path: &String) {
+
   }
 }
