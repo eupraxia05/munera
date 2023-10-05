@@ -9,10 +9,23 @@ use std::fs;
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
+pub struct Dock {
+  dockables: Vec<Box<dyn Dockable>>
+}
+
+impl Dock {
+  pub fn new() -> Self {
+    Self {
+      dockables: Vec::new()
+    }
+  }
+}
+
 pub struct Editor {
   blass: RetainedImage,
   tools: Vec<Box<dyn Tool>>,
-  selected_tool_idx: Option<usize>
+  selected_tool_idx: Option<usize>,
+  dock: Dock
 }
 
 impl Editor {
@@ -21,7 +34,8 @@ impl Editor {
       blass: RetainedImage::from_image_bytes("tuwuck.png", include_bytes!("../../ass/tuwuck.png"))
         .expect("Failed to load image!"),
       tools: vec![Box::new(AssetBrowserTool{ }), Box::new(PlayTool{ })],
-      selected_tool_idx: None }
+      selected_tool_idx: None,
+    dock: Dock::new() }
   }
 
   pub fn run(&mut self, engine: &mut Engine) {
@@ -42,7 +56,7 @@ impl Editor {
             self.build_tool_properties(ui)
           });
           CentralPanel::default().show(&ctx, |ui| {
-            Self::build_dock(&ctx, ui)
+            self.build_dock(&ctx, ui)
           })
         });
       };
@@ -80,13 +94,13 @@ impl Editor {
     }
   }
 
-  fn build_tool_properties(&self, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, ui: &mut Ui) {
     ScrollArea::new([false, true]).show(ui, |ui| {
       if self.selected_tool_idx.is_some() {
         let tool = &self.tools[self.selected_tool_idx.unwrap()];
         ui.label(tool.name());
         ui.separator();
-        tool.build_tool_properties(ui);
+        tool.build_tool_properties(&mut self.dock, ui);
       } else {
         ui.label("Tool Properties");
         ui.separator();
@@ -102,9 +116,13 @@ impl Editor {
     });
   }
 
-  fn build_dock(ctx: &EguiContext, ui: &mut Ui) {
+  fn build_dock(&mut self, ctx: &EguiContext, ui: &mut Ui) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
-      ui.label("Tabs");
+      ui.horizontal(|ui| {
+        for dockable in &self.dock.dockables {
+          ui.button(dockable.title());
+        }
+      })
     });
     CentralPanel::default().show(ctx, |ui| {
       ui.label("Dockable Content");
@@ -114,7 +132,7 @@ impl Editor {
 
 trait Tool {
   fn name(&self) -> &'static str;
-  fn build_tool_properties(&self, ui: &mut Ui);
+  fn build_tool_properties(&self, dock: &mut Dock, ui: &mut Ui);
 }
 
 struct AssetBrowserTool;
@@ -124,7 +142,7 @@ impl Tool for AssetBrowserTool {
     "Asset Browser"
   }
 
-  fn build_tool_properties(&self, ui: &mut Ui) {
+  fn build_tool_properties(&self, editor: &mut Dock, ui: &mut Ui) {
     let paths = fs::read_dir("./ass/").unwrap();
 
     for path in paths {
@@ -140,7 +158,21 @@ impl Tool for PlayTool {
     "Play"
   }
 
-  fn build_tool_properties(&self, ui: &mut Ui) {
-    ui.button("Play!");
+  fn build_tool_properties(&self, editor: &mut Dock, ui: &mut Ui) {
+    if ui.button("Play!").clicked() {
+      editor.dockables.push(Box::new(AssetEditor { }));
+    }
+  }
+}
+
+pub trait Dockable {
+  fn title(&self) -> String;
+}
+
+struct AssetEditor;
+
+impl Dockable for AssetEditor {
+  fn title(&self) -> String {
+    String::from("Asset Editor")
   }
 }
