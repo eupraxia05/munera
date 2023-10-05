@@ -10,13 +10,15 @@ const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
 pub struct Dock {
-  dockables: Vec<Box<dyn Dockable>>
+  dockables: Vec<Box<dyn Dockable>>,
+  focused_dockable: usize
 }
 
 impl Dock {
   pub fn new() -> Self {
     Self {
-      dockables: Vec::new()
+      dockables: Vec::new(),
+      focused_dockable: 0
     }
   }
 }
@@ -119,13 +121,17 @@ impl Editor {
   fn build_dock(&mut self, ctx: &EguiContext, ui: &mut Ui) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
-        for dockable in &self.dock.dockables {
-          ui.button(dockable.title());
+        for (idx, dockable) in self.dock.dockables.iter().enumerate() {
+          if ui.button(dockable.title()).clicked() {
+            self.dock.focused_dockable = idx;
+          }
         }
       })
     });
     CentralPanel::default().show(ctx, |ui| {
-      ui.label("Dockable Content");
+      if self.dock.dockables.len() > self.dock.focused_dockable {
+        self.dock.dockables[self.dock.focused_dockable].build_content(ui);
+      }
     });
   }
 }
@@ -142,11 +148,15 @@ impl Tool for AssetBrowserTool {
     "Asset Browser"
   }
 
-  fn build_tool_properties(&self, editor: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&self, dock: &mut Dock, ui: &mut Ui) {
     let paths = fs::read_dir("./ass/").unwrap();
 
     for path in paths {
       ui.label(path.unwrap().file_name().to_str().unwrap());
+    }
+
+    if ui.button("Beep!").clicked() {
+      dock.dockables.push(Box::new(AssetEditorDockable { }))
     }
   }
 }
@@ -158,21 +168,38 @@ impl Tool for PlayTool {
     "Play"
   }
 
-  fn build_tool_properties(&self, editor: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&self, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
-      editor.dockables.push(Box::new(AssetEditor { }));
+      dock.dockables.push(Box::new(PlayDockable { }));
     }
   }
 }
 
 pub trait Dockable {
   fn title(&self) -> String;
+  fn build_content(&self, ui: &mut Ui);
 }
 
-struct AssetEditor;
+struct AssetEditorDockable;
 
-impl Dockable for AssetEditor {
+impl Dockable for AssetEditorDockable {
   fn title(&self) -> String {
     String::from("Asset Editor")
+  }
+
+  fn build_content(&self, ui: &mut Ui) {
+    ui.label("Asset Editor Content");
+  }
+}
+
+struct PlayDockable;
+
+impl Dockable for PlayDockable {
+  fn title(&self) -> String {
+    String::from("Play")
+  }
+
+  fn build_content(&self, ui: &mut Ui) {
+    ui.label("Play Content");
   }
 }
