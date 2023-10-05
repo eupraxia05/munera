@@ -27,17 +27,17 @@ pub struct Editor {
   blass: RetainedImage,
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
-  dock: Dock
-}
+  dock: Dock}
 
 impl Editor {
   pub fn new() -> Self {
     Self {
       blass: RetainedImage::from_image_bytes("tuwuck.png", include_bytes!("../../ass/tuwuck.png"))
         .expect("Failed to load image!"),
-      tools: vec![Box::new(AssetBrowserTool{ }), Box::new(PlayTool{ })],
+      tools: vec![Box::new(AssetBrowserTool::new()), Box::new(PlayTool{ })],
       selected_tool_idx: None,
-    dock: Dock::new() }
+      dock: Dock::new()
+   }
   }
 
   pub fn run(&mut self, engine: &mut Engine) {
@@ -99,7 +99,7 @@ impl Editor {
   fn build_tool_properties(&mut self, ui: &mut Ui) {
     ScrollArea::new([false, true]).show(ui, |ui| {
       if self.selected_tool_idx.is_some() {
-        let tool = &self.tools[self.selected_tool_idx.unwrap()];
+        let mut tool = &mut self.tools[self.selected_tool_idx.unwrap()];
         ui.label(tool.name());
         ui.separator();
         tool.build_tool_properties(&mut self.dock, ui);
@@ -138,17 +138,75 @@ impl Editor {
 
 trait Tool {
   fn name(&self) -> &'static str;
-  fn build_tool_properties(&self, dock: &mut Dock, ui: &mut Ui);
+  fn build_tool_properties(&mut self, dock: &mut Dock, ui: &mut Ui);
 }
 
-struct AssetBrowserTool;
+struct AssetBrowserTool {
+  import_path: String,
+  target_path: String,
+  import_handlers: Vec<Box<dyn ImportHandler>>
+}
+
+impl AssetBrowserTool {
+  fn new() -> Self {
+    Self {
+      import_path: String::from(""),
+      target_path: String::from(""),
+      import_handlers: vec![Box::new(ImageImportHandler::new()), Box::new(MeshImportHandler::new())]
+    }
+  }
+}
 
 impl Tool for AssetBrowserTool {
   fn name(&self) -> &'static str {
     "Asset Browser"
   }
 
-  fn build_tool_properties(&self, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, dock: &mut Dock, ui: &mut Ui) {
+
+    ui.collapsing("Import", |ui| {
+      ui.horizontal(|ui| {
+        ui.label("Source");
+        ui.separator();
+        ui.label(self.import_path.clone());
+        if ui.button("Browse").clicked() {
+          let result = tinyfiledialogs::open_file_dialog("Browse for Import Source", "./", None);
+          if result.is_some() {
+            self.import_path = result.unwrap();
+          }
+        }
+      });
+
+      ui.horizontal(|ui| {
+        ui.label("Target Dir");
+        ui.separator();
+        ui.label(self.target_path.clone());
+        if ui.button("Browse").clicked() {
+          let result = tinyfiledialogs::save_file_dialog_with_filter("Browse for Import Target", "./", &["*.ass"]
+            , "Munera Asset File (.ass)");
+          if result.is_some() {
+            self.target_path = result.unwrap();
+          }
+        }
+      });
+
+      let mut ass_type = None;
+      'handler_loop: for handler in &self.import_handlers {
+        for extension in handler.extensions() {
+          if self.import_path.ends_with(extension) {
+            ass_type = Some(handler.name());
+            break 'handler_loop
+          }
+        }
+      }
+
+      if ass_type.is_some() {
+        ui.label(ass_type.unwrap());
+      } else {
+        ui.label("Unsupported");
+      }
+    });
+
     let paths = fs::read_dir("./ass/").unwrap();
 
     for path in paths {
@@ -168,7 +226,7 @@ impl Tool for PlayTool {
     "Play"
   }
 
-  fn build_tool_properties(&self, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
       dock.dockables.push(Box::new(PlayDockable { }));
     }
@@ -201,5 +259,46 @@ impl Dockable for PlayDockable {
 
   fn build_content(&self, ui: &mut Ui) {
     ui.label("Play Content");
+  }
+}
+
+trait ImportHandler {
+  fn name(&self) -> &'static str;
+  fn extensions(&self) -> &[&'static str];
+}
+
+struct ImageImportHandler;
+
+impl ImageImportHandler {
+  fn new() -> Self {
+    Self { }
+  }
+}
+
+impl ImportHandler for ImageImportHandler {
+  fn name(&self) -> &'static str {
+    "Image"
+  }
+
+  fn extensions(&self) -> &[&'static str] {
+    &[".png", ".jpg", ".bmp", ".tga", ".exr", ".hdr"]
+  }
+}
+
+struct MeshImportHandler;
+
+impl MeshImportHandler {
+  fn new() -> Self {
+    Self { }
+  }
+}
+
+impl ImportHandler for MeshImportHandler {
+  fn name(&self) -> &'static str {
+    "Mesh"
+  }
+
+  fn extensions(&self) -> &[&'static str] {
+    &[".gltf", ".fbx", ".obj"]
   }
 }
