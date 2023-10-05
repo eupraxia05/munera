@@ -4,25 +4,27 @@ use crate::eng::Engine;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use egui_extras::RetainedImage;
+use std::fs;
 
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
-pub struct Editor<'a> {
-  engine: RefCell<&'a mut Engine>,
+pub struct Editor {
   blass: RetainedImage,
-  tools: Vec<Box<dyn Tool>>
+  tools: Vec<Box<dyn Tool>>,
+  selected_tool_idx: Option<usize>
 }
 
-impl<'a> Editor<'a> {
-  pub fn new(engine: &'a mut Engine) -> Self {
-    Self { engine: RefCell::new(engine), 
+impl Editor {
+  pub fn new() -> Self {
+    Self {
       blass: RetainedImage::from_image_bytes("tuwuck.png", include_bytes!("../../ass/tuwuck.png"))
         .expect("Failed to load image!"),
-      tools: vec![Box::new(AssetBrowserTool{ }), Box::new(PlayTool{ })] }
+      tools: vec![Box::new(AssetBrowserTool{ }), Box::new(PlayTool{ })],
+      selected_tool_idx: None }
   }
 
-  pub fn run(&'a mut self) {
+  pub fn run(&mut self, engine: &mut Engine) {
     'main_loop : loop {
       let fun = |ctx: &EguiContext| {
         TopBottomPanel::top("title_menu").show(&ctx, |ui| {
@@ -36,8 +38,8 @@ impl<'a> Editor<'a> {
           Self::build_console(ui)
         });
         CentralPanel::default().show(&ctx, |ui| {
-          SidePanel::left("inspector").resizable(true).show(&ctx, |ui| {
-            Self::build_inspector(ui)
+          SidePanel::left("tool_properties").resizable(true).show(&ctx, |ui| {
+            self.build_tool_properties(ui)
           });
           CentralPanel::default().show(&ctx, |ui| {
             Self::build_dock(&ctx, ui)
@@ -45,11 +47,10 @@ impl<'a> Editor<'a> {
         });
       };
 
-      let mut eng = self.engine.borrow_mut();
-      eng.get_gfx().begin_frame();
-      eng.get_gfx().end_frame(fun);
+      engine.get_gfx().begin_frame();
+      engine.get_gfx().end_frame(fun);
 
-      if eng.get_gfx().should_quit() {
+      if engine.get_gfx().should_quit() {
         break 'main_loop;
       }
     }
@@ -69,18 +70,27 @@ impl<'a> Editor<'a> {
     });
   }
 
-  fn build_toolbar(&self, ui: &mut Ui) {
+  fn build_toolbar(&mut self, ui: &mut Ui) {
     ui.label("Toolbar");
     ui.separator();
-    for tool in &self.tools {
-      ui.button(tool.name());
+    for (idx, tool) in self.tools.iter().enumerate() {
+      if ui.button(tool.name()).clicked() {
+        self.selected_tool_idx = Some(idx);
+      }
     }
   }
 
-  fn build_inspector(ui: &mut Ui) {
+  fn build_tool_properties(&self, ui: &mut Ui) {
     ScrollArea::new([false, true]).show(ui, |ui| {
-      ui.label("Inspector");
-      ui.separator();
+      if self.selected_tool_idx.is_some() {
+        let tool = &self.tools[self.selected_tool_idx.unwrap()];
+        ui.label(tool.name());
+        ui.separator();
+        tool.build_tool_properties(ui);
+      } else {
+        ui.label("Tool Properties");
+        ui.separator();
+      }
     });
   }
 
@@ -104,7 +114,7 @@ impl<'a> Editor<'a> {
 
 trait Tool {
   fn name(&self) -> &'static str;
-  fn image_file(&self) -> &'static str;
+  fn build_tool_properties(&self, ui: &mut Ui);
 }
 
 struct AssetBrowserTool;
@@ -114,8 +124,12 @@ impl Tool for AssetBrowserTool {
     "Asset Browser"
   }
 
-  fn image_file(&self) -> &'static str {
-    "asset_browser.png"
+  fn build_tool_properties(&self, ui: &mut Ui) {
+    let paths = fs::read_dir("./ass/").unwrap();
+
+    for path in paths {
+      ui.label(path.unwrap().file_name().to_str().unwrap());
+    }
   }
 }
 
@@ -126,7 +140,7 @@ impl Tool for PlayTool {
     "Play"
   }
 
-  fn image_file(&self) -> &'static str {
-    "play.png"
+  fn build_tool_properties(&self, ui: &mut Ui) {
+    ui.button("Play!");
   }
 }
