@@ -32,7 +32,7 @@ impl GfxRuntime {
       SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
 
       let window = SDL_CreateWindow(CString::new("Munera").unwrap().as_ptr(), 
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1920, 1080, 
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, 
         SDL_WINDOW_OPENGL.0 | SDL_WINDOW_RESIZABLE.0);
 
       let gl_context = SDL_GL_CreateContext(window);

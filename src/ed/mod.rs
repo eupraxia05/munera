@@ -2,7 +2,7 @@ use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, 
 use image::{ImageBuffer, EncodableLayout};
 
 use crate::ass::{AssetCache, ImageAsset};
-use crate::eng::Engine;
+use crate::eng::{Engine, eng_log};
 use std::io::Write;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
@@ -121,9 +121,26 @@ impl Editor {
   fn build_console(ui: &mut Ui) {
     ui.label("Console");
     ui.separator();
-    ScrollArea::new([false, true]).auto_shrink([false, false]).show(ui, |ui| {
-      ui.label(RichText::new("I am the very image of a modern major-general!"));
-    });
+    ScrollArea::new([false, true]).auto_shrink([false, false]).stick_to_bottom(true)
+      .show(ui, |ui| {
+        let messages = eng_log::LOGGER.messages.lock()
+          .expect("Couldn't lock logger messages!");
+        for message in messages.clone() {
+          let color = match message.level() {
+            log::Level::Debug => Color32::GRAY,
+            log::Level::Info => Color32::WHITE,
+            log::Level::Warn => Color32::YELLOW,
+            log::Level::Error => Color32::RED,
+            log::Level::Trace => Color32::BROWN
+          };
+
+          let fmt = format!("{}: {}", message.level(), message.message());
+
+          ui.separator();
+          ui.label(RichText::new(fmt).color(color));
+        }
+      }
+    );
   }
 
   fn build_dock(&mut self, ctx: &EguiContext, ui: &mut Ui) {
@@ -218,6 +235,8 @@ impl Tool for AssetBrowserTool {
 
       if ui.button("Import").clicked() && ass_type.is_some() {
         let handler = &self.import_handlers[ass_type.unwrap()];
+        log::info!("Importing: [{}] to asset file: [{}] Asset type: {}",
+          self.import_path, self.target_path, handler.name());
         handler.import(&self.import_path, &self.target_path);
       }
     });
@@ -278,7 +297,7 @@ impl AssetEditorDockable {
 
 impl Dockable for AssetEditorDockable {
   fn title(&self) -> String {
-    String::from("Asset Editor")
+    self.ass_name.clone()
   }
 
   fn build_content(&self, ui: &mut Ui) {
@@ -342,18 +361,30 @@ impl ImportHandler for ImageImportHandler {
       let decode = open.unwrap().decode();
       if decode.is_ok() {
         let img = decode.unwrap();
-        let rgba = img.as_rgba8();
-        if rgba.is_some() {
-          let enc = serde_binary::encode(&ImageImportSerializeHelper{img: &rgba.unwrap()}, 
-            serde_binary::binary_stream::Endian::Little);
-          let mut file = File::create(target_path);
-          if file.is_ok() && enc.is_ok() {
-            file.unwrap().write_all(&enc.unwrap());
+        let rgba = img.into_rgba8();
+        let enc = serde_binary::encode(&ImageImportSerializeHelper{img: &rgba}, 
+          serde_binary::binary_stream::Endian::Little);
+        let file = File::create(target_path);
+        if file.is_ok() {
+          if enc.is_ok() {
+            let write_result = file.unwrap().write_all(&enc.unwrap());
+            if write_result.is_err() {
+              log::error!("Failed to write {}: {}", target_path, write_result.err().unwrap())
+            }
+          } else {
+            log::error!("Failed to encode {}: {}", import_path, enc.err().unwrap());
           }
+        } 
+        else {
+          log::error!("Failed to open {}", target_path);
         }
+      } else {
+        log::error!("Failed to decode {}", import_path)
       }
+    } else {
+      log::error!("Failed to open {}", import_path);
     }
-  }
+  } 
 }
 
 struct MeshImportHandler;

@@ -6,6 +6,8 @@ use std::cell::RefCell;
 
 use crate::{gfx::GfxRuntime, ass::AssetCache};
 
+pub mod eng_log;
+
 pub trait Comp {
   fn ent_has(ent: EntityRef) -> bool;
   fn ent_add(world: &mut World, ent: Entity);
@@ -46,7 +48,11 @@ pub struct Engine {
 
 impl Engine {
   pub fn new() -> Self {
-    return Self { 
+    log::set_logger(&eng_log::LOGGER)
+      .map(|()| log::set_max_level(log::LevelFilter::Info))
+      .expect("Couldn't set logger!");
+    log::info!("Initializing engine...");
+    Self { 
       comp_types: define_comps!(), 
       gfx: RefCell::new(GfxRuntime::new()), 
       asset_cache: RefCell::new(AssetCache::new())
