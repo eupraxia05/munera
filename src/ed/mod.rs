@@ -42,7 +42,10 @@ impl Editor {
     Self {
       blass: RetainedImage::from_image_bytes("tuwuck.png", include_bytes!("../../ass/tuwuck.png"))
         .expect("Failed to load image!"),
-      tools: vec![Box::new(AssetBrowserTool::new()), Box::new(PlayTool{ })],
+      tools: vec![
+        Box::new(AssetBrowserTool::new()), 
+        Box::new(PlayTool{ }),
+        Box::new(AssetCacheTool{ })],
       selected_tool_idx: None,
       dock: Dock::new()
    }
@@ -276,6 +279,24 @@ impl Tool for PlayTool {
     if ui.button("Play!").clicked() {
       dock.dockables.push(Box::new(PlayDockable { }));
     }
+  }
+}
+
+struct AssetCacheTool;
+
+impl Tool for AssetCacheTool {
+  fn name(&self) -> &'static str {
+    "Asset Cache"
+  }
+
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, 
+    dock: &mut Dock, ui: &mut Ui) 
+  {
+    let cache = asset_cache.borrow();
+    let assets = cache.borrow_all_assets();
+    assets.iter().for_each(|ass| {
+      ui.label(ass.0);
+    });
   }
 }
 

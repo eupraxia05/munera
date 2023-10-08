@@ -73,6 +73,10 @@ impl AssetCache {
       None
     }
   }
+
+  pub fn borrow_all_assets(&self) -> &HashMap<String, Box<dyn Asset>> {
+    &self.assets
+  }
 }
 
 struct AssetDeserializeHelper {
