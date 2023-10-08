@@ -85,16 +85,20 @@ impl Editor {
   }
 
   fn build_title_menu(&self, ctx: &EguiContext, ui: &mut Ui) {
-    ui.horizontal(|ui| {
+    egui::menu::bar(ui, |ui| {
       ui.image(self.blass.texture_id(ctx), Vec2::new(32.0f32, 32.0f32));
-      ui.separator();
-      ui.button("File");
-      ui.separator();
-      ui.button("Project");
-      ui.separator();
-      ui.button("Preferences");
-      ui.separator();
-      ui.button("Help");
+      ui.menu_button("File", |ui| {
+        ui.button("New...");
+      });
+      ui.menu_button("Project", |ui| {
+        ui.button("Project Settings");
+      });
+      ui.menu_button("Preferences", |ui| {
+        ui.button("Editor Settings");
+      });
+      ui.menu_button("Help", |ui| {
+        ui.button("Documentation");
+      });
     });
   }
 
@@ -282,6 +286,19 @@ impl Tool for PlayTool {
   }
 }
 
+fn to_mem_size_str(size: usize) -> String {
+  let mut size_str = format!("{}", size);
+  let postfixes = &["B", "KiB", "MiB", "GiB", "TiB"];
+  let mut curr_size = size;
+  for postfix in postfixes {
+    if curr_size < 1024 {
+      return format!("{} {}", curr_size, postfix)
+    }
+    curr_size /= 1024;
+  }
+  format!("{} B", size)
+}
+
 struct AssetCacheTool;
 
 impl Tool for AssetCacheTool {
@@ -294,9 +311,13 @@ impl Tool for AssetCacheTool {
   {
     let cache = asset_cache.borrow();
     let assets = cache.borrow_all_assets();
+    let mut size = 0;
     assets.iter().for_each(|ass| {
       ui.label(ass.0);
+      size += ass.1.size_bytes();
     });
+    ui.separator();
+    ui.label(format!("Total asset memory: {}", to_mem_size_str(size)));
   }
 }
 

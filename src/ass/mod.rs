@@ -10,6 +10,7 @@ use crate::math;
 pub trait Asset {
   fn decode(&mut self, de: &mut Deserializer) -> serde_binary::Result<()>;
   fn as_any(&self) -> &dyn Any;
+  fn size_bytes(&self) -> usize;
 }
 
 pub struct ImageAsset {
@@ -36,6 +37,10 @@ impl Asset for ImageAsset {
 
   fn as_any(&self) -> &dyn Any {
     self
+  }
+
+  fn size_bytes(&self) -> usize {
+    self.data.len() * size_of::<u8>() + size_of::<math::Vec2u>()
   }
 }
 
