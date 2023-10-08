@@ -2,6 +2,7 @@ pub mod eng;
 pub mod gfx;
 pub mod math;
 pub mod ed;
+pub mod ass;
 
 use egui::ComboBox;
 use egui::{epaint::Hsva, Context, Response};

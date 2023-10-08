@@ -1,6 +1,7 @@
 use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText};
 use image::{ImageBuffer, EncodableLayout};
 
+use crate::ass::{AssetCache, ImageAsset};
 use crate::eng::Engine;
 use std::io::Write;
 use std::rc::{Rc, Weak};
@@ -32,7 +33,8 @@ pub struct Editor {
   blass: RetainedImage,
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
-  dock: Dock}
+  dock: Dock
+}
 
 impl Editor {
   pub fn new() -> Self {
@@ -60,7 +62,7 @@ impl Editor {
         });
         CentralPanel::default().show(&ctx, |ui| {
           SidePanel::left("tool_properties").resizable(true).show(&ctx, |ui| {
-            self.build_tool_properties(ui)
+            self.build_tool_properties(engine.get_asset_cache(), ui)
           });
           CentralPanel::default().show(&ctx, |ui| {
             self.build_dock(&ctx, ui)
@@ -68,10 +70,11 @@ impl Editor {
         });
       };
 
-      engine.get_gfx().begin_frame();
-      engine.get_gfx().end_frame(fun);
+      let mut gfx = engine.get_gfx().borrow_mut();
+      gfx.begin_frame();
+      gfx.end_frame(fun);
 
-      if engine.get_gfx().should_quit() {
+      if gfx.should_quit() {
         break 'main_loop;
       }
     }
@@ -101,13 +104,13 @@ impl Editor {
     }
   }
 
-  fn build_tool_properties(&mut self, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
     ScrollArea::new([false, true]).show(ui, |ui| {
       if self.selected_tool_idx.is_some() {
         let mut tool = &mut self.tools[self.selected_tool_idx.unwrap()];
         ui.label(tool.name());
         ui.separator();
-        tool.build_tool_properties(&mut self.dock, ui);
+        tool.build_tool_properties(asset_cache, &mut self.dock, ui);
       } else {
         ui.label("Tool Properties");
         ui.separator();
@@ -143,13 +146,14 @@ impl Editor {
 
 trait Tool {
   fn name(&self) -> &'static str;
-  fn build_tool_properties(&mut self, dock: &mut Dock, ui: &mut Ui);
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui);
 }
 
 struct AssetBrowserTool {
   import_path: String,
   target_path: String,
-  import_handlers: Vec<Box<dyn ImportHandler>>
+  import_handlers: Vec<Box<dyn ImportHandler>>,
+  selected_asset: Option<String>
 }
 
 impl AssetBrowserTool {
@@ -157,7 +161,8 @@ impl AssetBrowserTool {
     Self {
       import_path: String::from(""),
       target_path: String::from(""),
-      import_handlers: vec![Box::new(ImageImportHandler::new()), Box::new(MeshImportHandler::new())]
+      import_handlers: vec![Box::new(ImageImportHandler::new()), Box::new(MeshImportHandler::new())],
+      selected_asset: None
     }
   }
 }
@@ -167,7 +172,7 @@ impl Tool for AssetBrowserTool {
     "Asset Browser"
   }
 
-  fn build_tool_properties(&mut self, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
 
     ui.collapsing("Import", |ui| {
       ui.horizontal(|ui| {
@@ -220,11 +225,13 @@ impl Tool for AssetBrowserTool {
     let paths = fs::read_dir("./ass/").unwrap();
 
     for path in paths {
-      ui.label(path.unwrap().file_name().to_str().unwrap());
-    }
-
-    if ui.button("Beep!").clicked() {
-      dock.dockables.push(Box::new(AssetEditorDockable { }))
+      let p = path.unwrap().file_name();
+      let name = p.to_str().unwrap();
+      let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
+      if ui.selectable_label(is_selected, name).clicked() {
+        dock.dockables.push(Box::new(AssetEditorDockable::new(asset_cache,
+          &(String::from("./ass/") + &String::from(name)))));
+      }
     }
   }
 }
@@ -236,7 +243,7 @@ impl Tool for PlayTool {
     "Play"
   }
 
-  fn build_tool_properties(&mut self, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
       dock.dockables.push(Box::new(PlayDockable { }));
     }
@@ -248,7 +255,26 @@ pub trait Dockable {
   fn build_content(&self, ui: &mut Ui);
 }
 
-struct AssetEditorDockable;
+struct AssetEditorDockable {
+  ass_name: String,
+  image: RetainedImage
+}
+
+impl AssetEditorDockable {
+  fn new(asset_cache: &RefCell<AssetCache>, path: &String) -> Self {
+    let mut cache = asset_cache.borrow_mut();
+    cache.load_file(path);
+    let ass = cache.borrow_asset(path).expect("Couldn't borrow asset!");
+    let img = ass.as_any().downcast_ref::<ImageAsset>()
+      .expect("Failed to downcast to image!");
+    let col_img = 
+      ColorImage::from_rgba_premultiplied(
+        [img.size.x as usize, img.size.y as usize], 
+        &img.data);
+    let ret = RetainedImage::from_color_image(path, col_img);
+    Self { ass_name: path.clone(), image: ret }
+  }
+}
 
 impl Dockable for AssetEditorDockable {
   fn title(&self) -> String {
@@ -256,7 +282,8 @@ impl Dockable for AssetEditorDockable {
   }
 
   fn build_content(&self, ui: &mut Ui) {
-    ui.label("Asset Editor Content");
+    ui.image(self.image.texture_id(ui.ctx()), 
+      Vec2::new(self.image.width() as f32, self.image.height() as f32));
   }
 }
 
@@ -292,6 +319,9 @@ struct ImageImportSerializeHelper<'a> {
 
 impl<'a> serde_binary::Encode for ImageImportSerializeHelper<'a> {
   fn encode(&self, ser: &mut serde_binary::Serializer) -> serde_binary::Result<()> {
+    ser.writer.write_string("Image");
+    ser.writer.write_u32(self.img.width());
+    ser.writer.write_u32(self.img.height());
     ser.writer.write_bytes(self.img.as_bytes());
     Ok(())
   }

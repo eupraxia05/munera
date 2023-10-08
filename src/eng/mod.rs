@@ -2,8 +2,9 @@ use std::any::TypeId;
 use hecs::{EntityRef, Entity, World};
 use serde::{Serialize, Deserialize, ser::SerializeMap};
 use mac::{Comp, define_comps};
+use std::cell::RefCell;
 
-use crate::gfx::GfxRuntime;
+use crate::{gfx::GfxRuntime, ass::AssetCache};
 
 pub trait Comp {
   fn ent_has(ent: EntityRef) -> bool;
@@ -29,8 +30,6 @@ pub struct CompType {
   pub ent_rem: fn(&mut World, Entity),
 }
 
-
-
 impl CompType {
   fn new<T>(name: &str) -> Self
     where T: Comp + 'static {
@@ -41,19 +40,28 @@ impl CompType {
 
 pub struct Engine {
   comp_types: Vec<CompType>,
-  gfx: GfxRuntime
+  gfx: RefCell<GfxRuntime>,
+  asset_cache: RefCell<AssetCache>
 }
 
 impl Engine {
   pub fn new() -> Self {
-    return Self { comp_types: define_comps!(), gfx: GfxRuntime::new() }
+    return Self { 
+      comp_types: define_comps!(), 
+      gfx: RefCell::new(GfxRuntime::new()), 
+      asset_cache: RefCell::new(AssetCache::new())
+    }
   }
 
   pub fn get_comp_types(&self) -> &Vec<CompType> {
     &self.comp_types
   }
 
-  pub fn get_gfx(&mut self) -> &mut GfxRuntime {
-    &mut self.gfx
+  pub fn get_gfx(&self) -> &RefCell<GfxRuntime> {
+    &self.gfx
+  }
+
+  pub fn get_asset_cache(&self) -> &RefCell<AssetCache> {
+    &self.asset_cache
   }
 }
