@@ -51,16 +51,18 @@ impl AssetCache {
   }
 
   pub fn load_file(&mut self, name: &String) {
-    log::info!("Loading {}", name);
-    if let Ok(read) = fs::read(name) {
-      if let Ok(decode) = serde_binary::decode::<AssetDeserializeHelper>(&read, Endian::Little) {
-        self.assets.insert(name.clone(), decode.asset.expect("Failed to load asset!"));
+    if !self.assets.contains_key(name) {
+      log::info!("Loading {}", name);
+      if let Ok(read) = fs::read(name) {
+        if let Ok(decode) = serde_binary::decode::<AssetDeserializeHelper>(&read, Endian::Little) {
+          self.assets.insert(name.clone(), decode.asset.expect("Failed to load asset!"));
+        }
+        else {
+          log::error!("Failed to decode {}", name);
+        }
+      } else {
+        log::error!("Failed to open {}", name);
       }
-      else {
-        log::error!("Failed to decode {}", name);
-      }
-    } else {
-      log::error!("Failed to open {}", name);
     }
   }
 

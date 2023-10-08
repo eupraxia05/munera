@@ -1,4 +1,4 @@
-use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText};
+use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style};
 use image::{ImageBuffer, EncodableLayout};
 
 use crate::ass::{AssetCache, ImageAsset};
@@ -11,6 +11,7 @@ use std::fs;
 use image::io::Reader as ImageReader;
 use image::Rgba;
 use std::fs::File;
+use std::cmp;
 
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
@@ -107,7 +108,7 @@ impl Editor {
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
     ScrollArea::new([false, true]).show(ui, |ui| {
       if self.selected_tool_idx.is_some() {
-        let mut tool = &mut self.tools[self.selected_tool_idx.unwrap()];
+        let tool = &mut self.tools[self.selected_tool_idx.unwrap()];
         ui.label(tool.name());
         ui.separator();
         tool.build_tool_properties(asset_cache, &mut self.dock, ui);
@@ -146,10 +147,19 @@ impl Editor {
   fn build_dock(&mut self, ctx: &EguiContext, ui: &mut Ui) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
+        let mut close_idx = None;
         for (idx, dockable) in self.dock.dockables.iter().enumerate() {
-          if ui.button(dockable.title()).clicked() {
+          let tab = ui.button(dockable.title());
+          
+          if tab.clicked() {
             self.dock.focused_dockable = idx;
+          } else if tab.secondary_clicked() {
+            close_idx = Some(idx);
           }
+        }
+
+        if let Some(idx) = close_idx {
+          self.dock.dockables.remove(idx);
         }
       })
     });
@@ -301,8 +311,24 @@ impl Dockable for AssetEditorDockable {
   }
 
   fn build_content(&self, ui: &mut Ui) {
-    ui.image(self.image.texture_id(ui.ctx()), 
-      Vec2::new(self.image.width() as f32, self.image.height() as f32));
+    SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show(ui.ctx(), |ui| {
+      ui.label(format!("Resolution: {} x {}", self.image.width(), self.image.height()));
+    });
+    CentralPanel::default().show(ui.ctx(), |ui| {
+      ui.centered_and_justified(|ui| {
+        let w = self.image.width();
+        let h = self.image.height();
+        let aspect = w as f32 / h as f32;
+        let disp_h = cmp::min(ui.available_height() as usize, h);
+        let disp_w = cmp::min(ui.available_width() as usize, 
+          (disp_h as f32 * aspect) as usize);
+        let disp_h = cmp::min(ui.available_height() as usize, 
+          (disp_w as f32 / aspect) as usize);
+        ui.image(self.image.texture_id(ui.ctx()), 
+          Vec2::new(disp_w as f32, disp_h as f32));
+      });
+    });
+    
   }
 }
 
