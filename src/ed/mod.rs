@@ -235,8 +235,10 @@ impl Tool for AssetBrowserTool {
       });
 
       let mut ass_type = None;
-      'handler_loop: for handler in &self.import_handlers {
-        for (idx, extension) in handler.extensions().iter().enumerate() {
+      'handler_loop: for (idx, handler) 
+        in self.import_handlers.iter().enumerate() 
+      {
+        for extension in handler.extensions() {
           if self.import_path.ends_with(extension) {
             ass_type = Some(idx);
             break 'handler_loop

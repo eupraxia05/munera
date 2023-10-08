@@ -1,7 +1,7 @@
 use bytemuck::offset_of;
 use egui::epaint::{ImageDelta, Primitive, Vertex};
 use egui::epaint::textures::TextureFilter;
-use egui::{RawInput, Rect, Vec2, Modifiers, Context, TextureId, ImageData, Color32, ClippedPrimitive, PaintCallbackInfo, Event, Pos2, PointerButton};
+use egui::{RawInput, Rect, Vec2, Modifiers, Context, TextureId, ImageData, Color32, ClippedPrimitive, PaintCallbackInfo, Event, Pos2, PointerButton, TextureOptions};
 use fermium::prelude::{SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP, SDL_MOUSEMOTION, SDL_Keycode, SDL_Keysym};
 use fermium::scancode::SDL_SCANCODE_LEFT;
 use crate::gfx::GfxRuntime;
@@ -33,6 +33,7 @@ pub struct EguiIntegration {
   vao: GLuint,
   vbo: GLuint,
   element_array_buffer: GLuint,
+  next_native_texture_id: u64
 }
 
 impl EguiIntegration {
@@ -91,6 +92,7 @@ impl EguiIntegration {
         vao: vao,
         vbo: vbo,
         element_array_buffer: element_array_buffer,
+        next_native_texture_id: 0
       };
     }
   }
@@ -409,6 +411,14 @@ impl EguiIntegration {
 
       assert!(gl::GetError() == gl::NO_ERROR);
     }
+  }
+
+  pub fn register_native_texture(&mut self, tex: GLuint) -> egui::TextureId 
+  {
+    let id = egui::TextureId::User(self.next_native_texture_id);
+    self.next_native_texture_id += 1;
+    self.textures.insert(id, tex);
+    id
   }
 }
 
