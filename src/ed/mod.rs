@@ -1,20 +1,17 @@
 use egui::load::SizedTexture;
-use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style, TextureId, Id, Stroke, Margin};
+use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, Vec2, Frame, Color32, RichText, TextureId, Stroke, Margin};
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
-use crate::ass::{AssetCache, ImageAsset, ShaderAsset, ShaderType};
+use crate::ass::{AssetCache, ShaderAsset, ShaderType};
 use crate::engine::{Engine, eng_log};
 use std::io::Write;
-use std::rc::{Rc, Weak};
 use std::cell::RefCell;
-use egui_extras::RetainedImage;
 use std::fs;
 use image::io::Reader as ImageReader;
 use image::Rgba;
 use std::fs::File;
-use std::cmp;
-use crate::{Result, Error};
+use crate::Result;
 
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
@@ -34,7 +31,6 @@ impl Dock {
 }
 
 pub struct Editor {
-  blass: RetainedImage,
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
   dock: Dock,
@@ -44,8 +40,6 @@ pub struct Editor {
 impl Editor {
   pub fn new() -> Self {
     Self {
-      blass: RetainedImage::from_image_bytes("tuwuck.png", include_bytes!("../../ass/tuwuck.png"))
-        .expect("Failed to load image!"),
       tools: vec![
         Box::new(AssetBrowserTool::new()), 
         Box::new(PlayTool{ }),
@@ -65,7 +59,7 @@ impl Editor {
     'main_loop : loop {
       let fun = |ctx: &EguiContext| {
         TopBottomPanel::top("title_menu").show(&ctx, |ui| {
-          self.build_title_menu(&ctx, ui);
+          self.build_title_menu(ui);
         });
         SidePanel::left("toolbar").exact_width(TOOLBAR_WIDTH)
           .show(ctx, |ui| {
@@ -99,22 +93,22 @@ impl Editor {
     }
   }
 
-  fn build_title_menu(&self, ctx: &EguiContext, ui: &mut Ui) {
+  fn build_title_menu(&self, ui: &mut Ui) {
     egui::menu::bar(ui, |ui| {
       ui.image(egui::include_image!("../../ass/tuwuck.png"));
       ui.menu_button("File", |ui| {
         ui.menu_button("New...", |ui| {
-          ui.button("Shader");
+          let _ = ui.button("Scene");
         });
       });
       ui.menu_button("Project", |ui| {
-        ui.button("Project Settings");
+        let _ = ui.button("Project Settings");
       });
       ui.menu_button("Preferences", |ui| {
-        ui.button("Editor Settings");
+        let _ = ui.button("Editor Settings");
       });
       ui.menu_button("Help", |ui| {
-        ui.button("Documentation");
+        let _ = ui.button("Documentation");
       });
     });
   }
@@ -232,7 +226,6 @@ struct AssetBrowserTool {
   target_path: String,
   import_handlers: Vec<Box<dyn ImportHandler>>,
   selected_asset: Option<String>,
-  new_asset_path: String,
 }
 
 impl AssetBrowserTool {
@@ -243,7 +236,6 @@ impl AssetBrowserTool {
       import_handlers: vec![Box::new(ImageImportHandler::new()), 
         Box::new(MeshImportHandler::new()), Box::new(ShaderImportHandler::new())],
       selected_asset: None,
-      new_asset_path: String::from("")
     }
   }
 }
@@ -335,7 +327,7 @@ impl Tool for PlayTool {
     "Play"
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, _asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
       dock.dockables.push(Box::new(PlayDockable { }));
     }
@@ -343,7 +335,6 @@ impl Tool for PlayTool {
 }
 
 fn to_mem_size_str(size: usize) -> String {
-  let mut size_str = format!("{}", size);
   let postfixes = &["B", "KiB", "MiB", "GiB", "TiB"];
   let mut curr_size = size;
   for postfix in postfixes {
@@ -363,7 +354,7 @@ impl Tool for AssetCacheTool {
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, 
-    dock: &mut Dock, ui: &mut Ui) 
+    _dock: &mut Dock, ui: &mut Ui) 
   {
     let cache = asset_cache.borrow();
     let assets = cache.borrow_all_assets();
@@ -399,7 +390,7 @@ impl Dockable for AssetEditorDockable {
     self.ass_name.clone()
   }
 
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, _screen_tex: TextureId) {
     let mut ass_cache = asset_cache.borrow_mut();
     let ass = ass_cache.borrow_asset_mut(&self.ass_name);
     if ass.is_some() {
@@ -415,7 +406,7 @@ impl Dockable for PlayDockable {
     String::from("Play")
   }
 
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
+  fn build_content(&self, _asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
     ui.image(SizedTexture::new(screen_tex, Vec2::new(200.0, 200.0)));
   }
 }
@@ -440,10 +431,10 @@ struct ImageImportSerializeHelper<'a> {
 
 impl<'a> serde_binary::Encode for ImageImportSerializeHelper<'a> {
   fn encode(&self, ser: &mut serde_binary::Serializer) -> serde_binary::Result<()> {
-    ser.writer.write_string("Image");
-    ser.writer.write_u32(self.img.width());
-    ser.writer.write_u32(self.img.height());
-    ser.writer.write_bytes(self.img.as_bytes());
+    ser.writer.write_string("Image")?;
+    ser.writer.write_u32(self.img.width())?;
+    ser.writer.write_u32(self.img.height())?;
+    ser.writer.write_bytes(self.img.as_bytes())?;
     Ok(())
   }
 }
@@ -506,7 +497,7 @@ impl ImportHandler for MeshImportHandler {
     &[".gltf", ".fbx", ".obj"]
   }
 
-  fn import(&self, import_path: &String, target_path: &String) {
+  fn import(&self, _import_path: &String, _target_path: &String) {
 
   }
 }
