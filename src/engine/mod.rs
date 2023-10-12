@@ -8,22 +8,20 @@ use crate::{gfx::GfxRuntime, ass::AssetCache};
 
 pub mod eng_log;
 
+// A base trait to generate metadata for a component type.
 pub trait Comp {
   fn ent_has(ent: EntityRef) -> bool;
   fn ent_add(world: &mut World, ent: Entity);
   fn ent_rem(world: &mut World, ent: Entity);
 }
 
+/// Utility component to tag entities with a human-friendly name.
 #[derive(Comp, Serialize, Deserialize, Default)]
 pub struct NameComp {
   pub name: String
 }
 
-#[derive(Comp, Serialize, Deserialize, Default)]
-pub struct ParentComp {
-  pub parent: i32
-}
-
+/// Contains metadata defined for a particular component type.
 pub struct CompType {
   pub name: String,
   pub type_id: TypeId,
@@ -40,6 +38,7 @@ impl CompType {
   }
 }
 
+/// A context containing all engine systems, assets, and metadata.
 pub struct Engine {
   comp_types: Vec<CompType>,
   gfx: RefCell<GfxRuntime>,

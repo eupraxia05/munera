@@ -1,7 +1,7 @@
-//! A simple game engine.
+//! A humble little game engine.
 
 /// Core engine features.
-pub mod eng;
+pub mod engine;
 
 /// Low-level graphics utilities.
 pub mod gfx;

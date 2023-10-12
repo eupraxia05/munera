@@ -3,7 +3,7 @@ use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
 use crate::ass::{AssetCache, ImageAsset, ShaderAsset, ShaderType};
-use crate::eng::{Engine, eng_log};
+use crate::engine::{Engine, eng_log};
 use std::io::Write;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
