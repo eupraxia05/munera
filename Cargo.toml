@@ -22,3 +22,6 @@ egui_extras = { version = "0.22.0", features = ["image"] }
 image = { version = "0.24.7", default-features = false, features = ["png", "jpeg", "bmp"] }
 tinyfiledialogs = "3.0"
 log = "0.4.20"
+shaderc = "0.8.2"
+serde_repr = "0.1.16"
+spirv-reflect = "0.2.3"

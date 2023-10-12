@@ -17,6 +17,27 @@ use std::io::{Write, BufReader, Read};
 use serde::ser::SerializeMap;
 use mac::define_comps;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug, Clone)]
+pub struct Error {
+  message: String
+}
+
+impl Error {
+  fn new<T>(msg: &T) -> Self where T: ToString + ?Sized {
+    return Self {
+      message: msg.to_string()
+    }
+  }
+}
+
+impl std::fmt::Display for Error {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.message)
+  }
+}
+
 /*struct EditorContext {
   selected_ent: Option<Entity>,
   world: World,

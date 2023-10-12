@@ -1,7 +1,8 @@
 use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style};
 use image::{ImageBuffer, EncodableLayout};
+use shaderc::ShaderKind;
 
-use crate::ass::{AssetCache, ImageAsset};
+use crate::ass::{AssetCache, ImageAsset, ShaderAsset, ShaderType};
 use crate::eng::{Engine, eng_log};
 use std::io::Write;
 use std::rc::{Rc, Weak};
@@ -12,6 +13,7 @@ use image::io::Reader as ImageReader;
 use image::Rgba;
 use std::fs::File;
 use std::cmp;
+use crate::{Result, Error};
 
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
@@ -69,7 +71,7 @@ impl Editor {
             self.build_tool_properties(engine.get_asset_cache(), ui)
           });
           CentralPanel::default().show(&ctx, |ui| {
-            self.build_dock(&ctx, ui)
+            self.build_dock(engine.get_asset_cache(), &ctx, ui)
           })
         });
       };
@@ -88,7 +90,9 @@ impl Editor {
     egui::menu::bar(ui, |ui| {
       ui.image(self.blass.texture_id(ctx), Vec2::new(32.0f32, 32.0f32));
       ui.menu_button("File", |ui| {
-        ui.button("New...");
+        ui.menu_button("New...", |ui| {
+          ui.button("Shader");
+        });
       });
       ui.menu_button("Project", |ui| {
         ui.button("Project Settings");
@@ -151,7 +155,7 @@ impl Editor {
     );
   }
 
-  fn build_dock(&mut self, ctx: &EguiContext, ui: &mut Ui) {
+  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext, ui: &mut Ui) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
         let mut close_idx = None;
@@ -172,7 +176,7 @@ impl Editor {
     });
     CentralPanel::default().show(ctx, |ui| {
       if self.dock.dockables.len() > self.dock.focused_dockable {
-        self.dock.dockables[self.dock.focused_dockable].build_content(ui);
+        self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui);
       }
     });
   }
@@ -187,7 +191,8 @@ struct AssetBrowserTool {
   import_path: String,
   target_path: String,
   import_handlers: Vec<Box<dyn ImportHandler>>,
-  selected_asset: Option<String>
+  selected_asset: Option<String>,
+  new_asset_path: String,
 }
 
 impl AssetBrowserTool {
@@ -195,8 +200,10 @@ impl AssetBrowserTool {
     Self {
       import_path: String::from(""),
       target_path: String::from(""),
-      import_handlers: vec![Box::new(ImageImportHandler::new()), Box::new(MeshImportHandler::new())],
-      selected_asset: None
+      import_handlers: vec![Box::new(ImageImportHandler::new()), 
+        Box::new(MeshImportHandler::new()), Box::new(ShaderImportHandler::new())],
+      selected_asset: None,
+      new_asset_path: String::from("")
     }
   }
 }
@@ -207,6 +214,32 @@ impl Tool for AssetBrowserTool {
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
+
+    /*ui.collapsing("New", |ui| {
+      ui.horizontal(|ui| {
+        ui.label("New Asset Path");
+        ui.separator();
+        ui.label(self.new_asset_path.clone());
+        if ui.button("Browse").clicked() {
+          let result = tinyfiledialogs::save_file_dialog_with_filter("Browse for Import Target", "./", &["*.ass"]
+            , "Munera Asset File (.ass)");
+          if result.is_some() {
+            self.new_asset_path = result.unwrap();
+          }
+        }
+      });
+
+      if ui.button("Create").clicked() {
+        if let Ok(file) = File::create(&self.new_asset_path) {
+          let ass = ShaderAsset::default();
+          if serde_json::to_writer_pretty(file, &ass).is_err() {
+            log::error!("Failed to write asset to file!");
+          }
+        } else {
+          log::error!("Failed to open file: {}", self.new_asset_path)
+        }
+      }
+    });*/
 
     ui.collapsing("Import", |ui| {
       ui.horizontal(|ui| {
@@ -267,8 +300,16 @@ impl Tool for AssetBrowserTool {
       let name = p.to_str().unwrap();
       let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
       if ui.selectable_label(is_selected, name).clicked() {
-        dock.dockables.push(Box::new(AssetEditorDockable::new(asset_cache,
-          &(String::from("./ass/") + &String::from(name)))));
+        match AssetEditorDockable::new(asset_cache,
+          &(String::from("./ass/") + &String::from(name))) 
+        {
+          Err(e) => {
+            log::error!("Failed to open {}: {}", name, e);
+          },
+          Ok(dockable) => {
+            dock.dockables.push(Box::new(dockable));
+          }
+        }
       }
     }
   }
@@ -325,27 +366,18 @@ impl Tool for AssetCacheTool {
 
 pub trait Dockable {
   fn title(&self) -> String;
-  fn build_content(&self, ui: &mut Ui);
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui);
 }
 
 struct AssetEditorDockable {
-  ass_name: String,
-  image: RetainedImage
+  ass_name: String
 }
 
 impl AssetEditorDockable {
-  fn new(asset_cache: &RefCell<AssetCache>, path: &String) -> Self {
+  fn new(asset_cache: &RefCell<AssetCache>, path: &String) -> Result<Self> {
     let mut cache = asset_cache.borrow_mut();
-    cache.load_file(path);
-    let ass = cache.borrow_asset(path).expect("Couldn't borrow asset!");
-    let img = ass.as_any().downcast_ref::<ImageAsset>()
-      .expect("Failed to downcast to image!");
-    let col_img = 
-      ColorImage::from_rgba_premultiplied(
-        [img.size.x as usize, img.size.y as usize], 
-        &img.data);
-    let ret = RetainedImage::from_color_image(path, col_img);
-    Self { ass_name: path.clone(), image: ret }
+    cache.load_file(path)?;
+    Ok( Self { ass_name: path.clone() } )
   }
 }
 
@@ -354,25 +386,12 @@ impl Dockable for AssetEditorDockable {
     self.ass_name.clone()
   }
 
-  fn build_content(&self, ui: &mut Ui) {
-    SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show(ui.ctx(), |ui| {
-      ui.label(format!("Resolution: {} x {}", self.image.width(), self.image.height()));
-    });
-    CentralPanel::default().show(ui.ctx(), |ui| {
-      ui.centered_and_justified(|ui| {
-        let w = self.image.width();
-        let h = self.image.height();
-        let aspect = w as f32 / h as f32;
-        let disp_h = cmp::min(ui.available_height() as usize, h);
-        let disp_w = cmp::min(ui.available_width() as usize, 
-          (disp_h as f32 * aspect) as usize);
-        let disp_h = cmp::min(ui.available_height() as usize, 
-          (disp_w as f32 / aspect) as usize);
-        ui.image(self.image.texture_id(ui.ctx()), 
-          Vec2::new(disp_w as f32, disp_h as f32));
-      });
-    });
-    
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+    let mut ass_cache = asset_cache.borrow_mut();
+    let ass = ass_cache.borrow_asset_mut(&self.ass_name);
+    if ass.is_some() {
+      ass.unwrap().build_dockable_content(ui);
+    }
   }
 }
 
@@ -383,7 +402,7 @@ impl Dockable for PlayDockable {
     String::from("Play")
   }
 
-  fn build_content(&self, ui: &mut Ui) {
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
     ui.label("Play Content");
   }
 }
@@ -476,5 +495,79 @@ impl ImportHandler for MeshImportHandler {
 
   fn import(&self, import_path: &String, target_path: &String) {
 
+  }
+}
+
+struct ShaderImportHandler;
+
+impl ShaderImportHandler {
+  fn new() -> Self { 
+    Self { }
+  }
+}
+
+impl ImportHandler for ShaderImportHandler {
+  fn name(&self) -> &'static str {
+    "Shader"
+  }
+
+  fn extensions(&self) -> &[&'static str] {
+    &[".vert", ".frag"]
+  }
+
+  fn import(&self, import_path: &String, target_path: &String) {
+    let shader_kind = if import_path.ends_with(".vert") {
+      shaderc::ShaderKind::Vertex
+    } else if import_path.ends_with(".frag") {
+      shaderc::ShaderKind::Fragment
+    } else {
+      log::error!("Invalid shader file extension: {}", import_path);
+      return
+    };
+
+    match fs::read_to_string(import_path) {
+      Err(err) => {
+        log::error!("Failed to read {}: {}", import_path, err.to_string())
+      },
+      Ok(code) => {
+        if let Some(compiler) = shaderc::Compiler::new() {
+          match compiler.compile_into_spirv(&code, shader_kind, 
+            import_path, "main", None) 
+          {
+            Err(err) => {
+              log::error!("Failed to compile {}: {}", import_path, err.to_string());
+            },
+            Ok(spirv) => {
+              let mut ass = ShaderAsset::default();
+              ass.shader_type = match shader_kind {
+                ShaderKind::Vertex => ShaderType::Vertex,
+                ShaderKind::Fragment => ShaderType::Fragment,
+                _ => ShaderType::Vertex
+              };
+              ass.code = spirv.as_binary_u8().to_vec();
+              match serde_binary::encode(&ass, 
+                serde_binary::binary_stream::Endian::Little) 
+              {                
+                Err(err) => {
+                  log::error!("Failed to encode shader: {}", err);
+                },
+                Ok(bin) => {
+                  match fs::write(target_path, bin) {
+                    Err(err) => {
+                      log::error!("Failed to write to {}: {}", target_path, err.to_string());
+                    }
+                    Ok(()) => {
+                      
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          log::error!("Failed to create SPIRV compiler!");
+        }
+      }
+    }
   }
 }
