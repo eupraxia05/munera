@@ -1,6 +1,6 @@
 use std::ffi::{CString, CStr};
 use std::result::Result;
-use egui::Context;
+use egui::{Context, TextureId};
 use fermium::prelude::*;
 use fermium::*;
 use fermium::video::*;
@@ -21,7 +21,10 @@ pub struct GfxRuntime {
   egui: EguiIntegration,
   shader_program: GLuint,
   should_quit: bool,
-  events: Vec<SDL_Event>
+  events: Vec<SDL_Event>,
+  screen_tex: GLuint,
+  screen_framebuf: GLuint,
+  screen_egui_tex: TextureId
 }
 
 impl GfxRuntime {
@@ -50,7 +53,6 @@ impl GfxRuntime {
       let mut vbo: GLuint = 0;
       gl::GenBuffers(1, &mut vbo);
 
-      gl::ClearColor(0.05, 0.05, 0.05, 1.0);
       gl::BindVertexArray(vao);
       gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
@@ -128,7 +130,23 @@ impl GfxRuntime {
 
       SDL_GL_SetSwapInterval(1);
 
-      let egui = EguiIntegration::new();
+      let mut egui = EguiIntegration::new();
+
+      let mut screen_framebuf: GLuint = 0;
+      gl::GenFramebuffers(1, &mut screen_framebuf);
+      gl::BindFramebuffer(gl::FRAMEBUFFER, screen_framebuf);
+
+      let mut screen_tex: GLuint = 0;
+      gl::GenTextures(1, &mut screen_tex);
+      gl::BindTexture(gl::TEXTURE_2D, screen_tex);
+      gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGB.try_into().unwrap(), 1280, 720, 0, gl::RGB, gl::UNSIGNED_BYTE, std::ptr::null());
+      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR.try_into().unwrap());
+      gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR.try_into().unwrap());
+      gl::FramebufferTexture2D(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, screen_tex, 0);
+
+      gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+
+      let screen_egui_tex = egui.register_native_texture(screen_tex);
 
       return GfxRuntime { 
         window, 
@@ -138,7 +156,10 @@ impl GfxRuntime {
         egui, 
         shader_program,
         should_quit: false,
-        events: Vec::new()
+        events: Vec::new(),
+        screen_tex,
+        screen_framebuf,
+        screen_egui_tex
       };
     }
   }
@@ -149,15 +170,16 @@ impl GfxRuntime {
         return;
       }
       
-      let severity_str = if severity == gl::DEBUG_SEVERITY_LOW {
-        "message"
-      } else if severity == gl::DEBUG_SEVERITY_MEDIUM {
-        "warning"
-      } else {
-        "error"
-      };
-
-      unsafe { println!("OpenGL {}: {:?}", severity_str, CStr::from_ptr(message)); }
+      unsafe {
+        if severity == gl::DEBUG_SEVERITY_LOW {
+          log::info!("OpenGL Message: {:?}", CStr::from_ptr(message));
+        } else if severity == gl::DEBUG_SEVERITY_MEDIUM {
+          log::warn!("OpenGL Message: {:?}", CStr::from_ptr(message));
+        } else {
+          log::error!("OpenGL Message: {:?}", CStr::from_ptr(message));
+        };
+      }
+      
       assert!(severity != gl::DEBUG_SEVERITY_HIGH);
   }
 
@@ -180,6 +202,12 @@ impl GfxRuntime {
         }
       }
 
+      gl::BindFramebuffer(gl::FRAMEBUFFER, self.screen_framebuf);
+      gl::ClearColor(0.1, 0.7, 0.6, 1.0);
+      gl::Clear(gl::COLOR_BUFFER_BIT);
+      gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+
+      gl::ClearColor(0.05, 0.05, 0.05, 1.0);
       gl::Clear(gl::COLOR_BUFFER_BIT);
     }
   }
@@ -196,5 +224,9 @@ impl GfxRuntime {
 
   pub fn get_egui(&mut self) -> &mut EguiIntegration {
     &mut self.egui
+  }
+
+  pub fn get_screen_egui_tex(&self) -> TextureId {
+    self.screen_egui_tex
   }
 }

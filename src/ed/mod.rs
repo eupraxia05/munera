@@ -1,4 +1,4 @@
-use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style};
+use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style, TextureId};
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
@@ -54,6 +54,9 @@ impl Editor {
   }
 
   pub fn run(&mut self, engine: &mut Engine) {
+    let mut gfx = engine.get_gfx().borrow_mut();
+    let screen_tex = gfx.get_screen_egui_tex();
+
     'main_loop : loop {
       let fun = |ctx: &EguiContext| {
         TopBottomPanel::top("title_menu").show(&ctx, |ui| {
@@ -71,12 +74,11 @@ impl Editor {
             self.build_tool_properties(engine.get_asset_cache(), ui)
           });
           CentralPanel::default().show(&ctx, |ui| {
-            self.build_dock(engine.get_asset_cache(), &ctx, ui)
+            self.build_dock(engine.get_asset_cache(), &ctx, ui, screen_tex)
           })
         });
       };
 
-      let mut gfx = engine.get_gfx().borrow_mut();
       gfx.begin_frame();
       gfx.end_frame(fun);
 
@@ -155,7 +157,7 @@ impl Editor {
     );
   }
 
-  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext, ui: &mut Ui) {
+  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext, ui: &mut Ui, screen_tex: TextureId) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
         let mut close_idx = None;
@@ -176,7 +178,7 @@ impl Editor {
     });
     CentralPanel::default().show(ctx, |ui| {
       if self.dock.dockables.len() > self.dock.focused_dockable {
-        self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui);
+        self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui, screen_tex);
       }
     });
   }
@@ -366,7 +368,7 @@ impl Tool for AssetCacheTool {
 
 pub trait Dockable {
   fn title(&self) -> String;
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui);
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId);
 }
 
 struct AssetEditorDockable {
@@ -386,7 +388,7 @@ impl Dockable for AssetEditorDockable {
     self.ass_name.clone()
   }
 
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
     let mut ass_cache = asset_cache.borrow_mut();
     let ass = ass_cache.borrow_asset_mut(&self.ass_name);
     if ass.is_some() {
@@ -402,8 +404,8 @@ impl Dockable for PlayDockable {
     String::from("Play")
   }
 
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
-    ui.label("Play Content");
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
+    ui.image(screen_tex, Vec2::new(200.0, 200.0));
   }
 }
 
