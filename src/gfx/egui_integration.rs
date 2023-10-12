@@ -4,7 +4,7 @@ use egui::epaint::textures::TextureFilter;
 use egui::{RawInput, Rect, Vec2, Modifiers, Context, TextureId, ImageData, Color32, ClippedPrimitive, PaintCallbackInfo, Event, Pos2, PointerButton, TextureOptions};
 use fermium::prelude::{SDL_MOUSEBUTTONDOWN, SDL_MOUSEBUTTONUP, SDL_MOUSEMOTION, SDL_Keycode, SDL_Keysym};
 use fermium::scancode::SDL_SCANCODE_LEFT;
-use crate::gfx::GfxRuntime;
+use crate::gfx::OglGfx;
 use crate::math::{Vec2i, Vec2f, Vec3f};
 use fermium::video::*;
 use fermium::*;

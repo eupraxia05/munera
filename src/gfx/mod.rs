@@ -13,7 +13,17 @@ mod egui_integration;
 
 use self::egui_integration::EguiIntegration;
 
-pub struct GfxRuntime {
+pub trait Gfx {
+  fn begin_frame(&mut self);
+  fn end_frame(&mut self);
+  fn should_quit(&self) -> bool;
+  fn get_egui(&mut self) -> &mut EguiIntegration;
+  fn get_screen_egui_tex(&self) -> TextureId;
+  fn get_window(&self) -> *mut SDL_Window;
+  fn get_events(&self) -> &Vec<SDL_Event>;
+}
+
+pub struct OglGfx {
   window: *mut SDL_Window,
   gl_context: SDL_GLContext,
   vao: GLuint,
@@ -27,7 +37,7 @@ pub struct GfxRuntime {
   screen_egui_tex: TextureId
 }
 
-impl GfxRuntime {
+impl OglGfx {
   pub fn new() -> Self {
     unsafe { 
       SDL_Init(SDL_INIT_EVERYTHING);
@@ -148,7 +158,7 @@ impl GfxRuntime {
 
       let screen_egui_tex = egui.register_native_texture(screen_tex);
 
-      return GfxRuntime { 
+      return OglGfx { 
         window, 
         gl_context, 
         vao,
@@ -182,8 +192,10 @@ impl GfxRuntime {
       
       assert!(severity != gl::DEBUG_SEVERITY_HIGH);
   }
+}
 
-  pub fn begin_frame(&mut self) {
+impl Gfx for OglGfx {
+  fn begin_frame(&mut self) {
     unsafe {
       self.events.clear();
       let mut event = SDL_Event::default();
@@ -212,21 +224,27 @@ impl GfxRuntime {
     }
   }
 
-  pub fn end_frame(&mut self, ui_callback: impl FnOnce(&Context)) {
-    self.egui.run(self.window, &self.events, ui_callback);
-
+  fn end_frame(&mut self) {
     unsafe { SDL_GL_SwapWindow(self.window) }
   }
 
-  pub fn should_quit(&self) -> bool {
+  fn should_quit(&self) -> bool {
     self.should_quit
   }
 
-  pub fn get_egui(&mut self) -> &mut EguiIntegration {
+  fn get_egui(&mut self) -> &mut EguiIntegration {
     &mut self.egui
   }
 
-  pub fn get_screen_egui_tex(&self) -> TextureId {
+  fn get_screen_egui_tex(&self) -> TextureId {
     self.screen_egui_tex
+  }
+
+  fn get_window(&self) -> *mut SDL_Window {
+    self.window
+  }
+
+  fn get_events(&self) -> &Vec<SDL_Event> {
+    &self.events
   }
 }

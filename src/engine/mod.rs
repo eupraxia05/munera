@@ -4,7 +4,8 @@ use serde::{Serialize, Deserialize, ser::SerializeMap};
 use mac::{Comp, define_comps};
 use std::cell::RefCell;
 
-use crate::{gfx::GfxRuntime, ass::AssetCache};
+use crate::gfx;
+use crate::ass;
 
 pub mod eng_log;
 
@@ -41,8 +42,8 @@ impl CompType {
 /// A context containing all engine systems, assets, and metadata.
 pub struct Engine {
   comp_types: Vec<CompType>,
-  gfx: RefCell<GfxRuntime>,
-  asset_cache: RefCell<AssetCache>
+  gfx: RefCell<Box<dyn gfx::Gfx>>,
+  asset_cache: RefCell<ass::AssetCache>
 }
 
 impl Engine {
@@ -53,8 +54,8 @@ impl Engine {
     log::info!("Initializing engine...");
     Self { 
       comp_types: define_comps!(), 
-      gfx: RefCell::new(GfxRuntime::new()), 
-      asset_cache: RefCell::new(AssetCache::new())
+      gfx: RefCell::new(Box::new(gfx::OglGfx::new())), 
+      asset_cache: RefCell::new(ass::AssetCache::new())
     }
   }
 
@@ -62,11 +63,11 @@ impl Engine {
     &self.comp_types
   }
 
-  pub fn get_gfx(&self) -> &RefCell<GfxRuntime> {
+  pub fn get_gfx(&self) -> &RefCell<Box<dyn gfx::Gfx>> {
     &self.gfx
   }
 
-  pub fn get_asset_cache(&self) -> &RefCell<AssetCache> {
+  pub fn get_asset_cache(&self) -> &RefCell<ass::AssetCache> {
     &self.asset_cache
   }
 }

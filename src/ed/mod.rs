@@ -58,6 +58,8 @@ impl Editor {
 
   pub fn run(&mut self, engine: &mut Engine) {
     let mut gfx = engine.get_gfx().borrow_mut();
+    let window = gfx.get_window();
+    let events = gfx.get_events().clone();
     let screen_tex = gfx.get_screen_egui_tex();
 
     'main_loop : loop {
@@ -86,7 +88,10 @@ impl Editor {
       };
 
       gfx.begin_frame();
-      gfx.end_frame(fun);
+
+      gfx.get_egui().run(window, &events, fun);
+
+      gfx.end_frame();
 
       if gfx.should_quit() {
         break 'main_loop;
