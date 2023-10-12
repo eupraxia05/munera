@@ -1,4 +1,5 @@
-use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style, TextureId};
+use egui::load::SizedTexture;
+use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, TextureHandle, ColorImage, Vec2, Frame, Color32, RichText, Style, TextureId, Id, Stroke, Margin};
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
@@ -36,7 +37,8 @@ pub struct Editor {
   blass: RetainedImage,
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
-  dock: Dock
+  dock: Dock,
+  console_command_input_text: String
 }
 
 impl Editor {
@@ -49,7 +51,8 @@ impl Editor {
         Box::new(PlayTool{ }),
         Box::new(AssetCacheTool{ })],
       selected_tool_idx: None,
-      dock: Dock::new()
+      dock: Dock::new(),
+      console_command_input_text: String::default()
    }
   }
 
@@ -63,20 +66,23 @@ impl Editor {
           self.build_title_menu(&ctx, ui);
         });
         SidePanel::left("toolbar").exact_width(TOOLBAR_WIDTH)
-          .show(&ctx, |ui| {
+          .show(ctx, |ui| {
           self.build_toolbar(ui)
         });
-        TopBottomPanel::bottom("console").resizable(true).min_height(MIN_CONSOLE_HEIGHT).show(&ctx, |ui| {
-          Self::build_console(ui)
+        TopBottomPanel::bottom("console")
+          .resizable(true)
+          .min_height(MIN_CONSOLE_HEIGHT)
+          .frame(Frame::default()
+            .inner_margin(Margin::same(0.0)))
+          .show(ctx, |ui| 
+        {
+          self.build_console(ui)
         });
-        CentralPanel::default().show(&ctx, |ui| {
-          SidePanel::left("tool_properties").resizable(true).show(&ctx, |ui| {
-            self.build_tool_properties(engine.get_asset_cache(), ui)
-          });
-          CentralPanel::default().show(&ctx, |ui| {
-            self.build_dock(engine.get_asset_cache(), &ctx, ui, screen_tex)
-          })
+        SidePanel::left("tool_properties").resizable(true).show(ctx, |ui| {
+          self.build_tool_properties(engine.get_asset_cache(), ui)
         });
+
+        self.build_dock(engine.get_asset_cache(), ctx, screen_tex)
       };
 
       gfx.begin_frame();
@@ -90,7 +96,7 @@ impl Editor {
 
   fn build_title_menu(&self, ctx: &EguiContext, ui: &mut Ui) {
     egui::menu::bar(ui, |ui| {
-      ui.image(self.blass.texture_id(ctx), Vec2::new(32.0f32, 32.0f32));
+      ui.image(egui::include_image!("../../ass/tuwuck.png"));
       ui.menu_button("File", |ui| {
         ui.menu_button("New...", |ui| {
           ui.button("Shader");
@@ -132,11 +138,38 @@ impl Editor {
     });
   }
 
-  fn build_console(ui: &mut Ui) {
-    ui.label("Console");
-    ui.separator();
-    ScrollArea::new([false, true]).auto_shrink([false, false]).stick_to_bottom(true)
-      .show(ui, |ui| {
+  fn build_console(&mut self, ui: &mut Ui) {
+    ui.style_mut().spacing.item_spacing = Vec2::ZERO;
+    ui.style_mut().spacing.indent = 0.0;
+
+    TopBottomPanel::top("console_heading_panel").show_inside(ui, |ui| {
+      ui.label("Console");
+    });
+
+    TopBottomPanel::bottom("console_command_input").show_inside(ui, |ui| {
+      let re = ui.text_edit_singleline(&mut self.console_command_input_text);
+      if re.lost_focus()  && re.ctx.input(|r| r.key_pressed(egui::Key::Enter)) {
+        log::info!("> {}", self.console_command_input_text)
+      }
+    });
+
+    CentralPanel::default()
+      .frame(
+        Frame::default()
+        .fill(Color32::from_gray(20))
+        .stroke(Stroke::new(2.0, Color32::from_gray(50)))
+        .inner_margin(Margin::same(4.0))
+        .outer_margin(Margin::same(0.0)))
+      .show_inside(ui, |ui| 
+    {
+      ScrollArea::new([false, true])
+        .auto_shrink([false, false])
+        .stick_to_bottom(true)
+        .show(ui, |ui| 
+      {
+        ui.style_mut().spacing.item_spacing = Vec2::new(4.0, 4.0);
+        ui.style_mut().spacing.indent = 8.0;
+
         let messages = eng_log::LOGGER.messages.lock()
           .expect("Couldn't lock logger messages!");
         for message in messages.clone() {
@@ -147,17 +180,17 @@ impl Editor {
             log::Level::Error => Color32::RED,
             log::Level::Trace => Color32::BROWN
           };
-
+  
           let fmt = format!("{}: {}", message.level(), message.message());
-
+  
+          ui.label(RichText::new(fmt).color(color).family(egui::FontFamily::Monospace).size(12.0));
           ui.separator();
-          ui.label(RichText::new(fmt).color(color));
         }
-      }
-    );
+      });
+    });
   }
 
-  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext, ui: &mut Ui, screen_tex: TextureId) {
+  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext, screen_tex: TextureId) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
         let mut close_idx = None;
@@ -216,33 +249,6 @@ impl Tool for AssetBrowserTool {
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
-
-    /*ui.collapsing("New", |ui| {
-      ui.horizontal(|ui| {
-        ui.label("New Asset Path");
-        ui.separator();
-        ui.label(self.new_asset_path.clone());
-        if ui.button("Browse").clicked() {
-          let result = tinyfiledialogs::save_file_dialog_with_filter("Browse for Import Target", "./", &["*.ass"]
-            , "Munera Asset File (.ass)");
-          if result.is_some() {
-            self.new_asset_path = result.unwrap();
-          }
-        }
-      });
-
-      if ui.button("Create").clicked() {
-        if let Ok(file) = File::create(&self.new_asset_path) {
-          let ass = ShaderAsset::default();
-          if serde_json::to_writer_pretty(file, &ass).is_err() {
-            log::error!("Failed to write asset to file!");
-          }
-        } else {
-          log::error!("Failed to open file: {}", self.new_asset_path)
-        }
-      }
-    });*/
-
     ui.collapsing("Import", |ui| {
       ui.horizontal(|ui| {
         ui.label("Source");
@@ -405,7 +411,7 @@ impl Dockable for PlayDockable {
   }
 
   fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
-    ui.image(screen_tex, Vec2::new(200.0, 200.0));
+    ui.image(SizedTexture::new(screen_tex, Vec2::new(200.0, 200.0)));
   }
 }
 

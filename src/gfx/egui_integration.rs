@@ -80,8 +80,12 @@ impl EguiIntegration {
 
       assert!(gl::GetError() == gl::NO_ERROR);
 
+      let ctx = Context::default();
+
+      egui_extras::install_image_loaders(&ctx);
+
       return Self { 
-        ctx: Context::default(), 
+        ctx, 
         textures: HashMap::new(), 
         program: program, 
         u_screen_size: u_screen_size, 
