@@ -80,14 +80,14 @@ impl Editor {
       selected_tool_idx: None,
       dock: Dock::new(),
       console_command_input_text: String::default(),
-      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../ass/tuwuck.png"))
+      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../ass/munera.png"))
         .expect("Failed to load title image!")
    }
   }
 
   fn build_title_menu(&self, ui: &mut Ui) {
     egui::menu::bar(ui, |ui| {
-      ui.image(self.title_img.texture_id(ui.ctx()), Vec2::new(16.0, 16.0));
+      ui.image(self.title_img.texture_id(ui.ctx()), Vec2::new(24.0, 24.0));
       ui.menu_button("File", |ui| {
         ui.menu_button("New...", |ui| {
           let _ = ui.button("Scene");
