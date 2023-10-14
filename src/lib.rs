@@ -3,9 +3,6 @@
 /// Core engine features.
 pub mod engine;
 
-/// Low-level graphics utilities.
-pub mod gfx;
-
 /// Vector, matrix, and spatial math utilities.
 pub mod math;
 

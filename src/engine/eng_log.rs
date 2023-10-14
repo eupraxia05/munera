@@ -12,7 +12,7 @@ impl LoggerMessage {
   fn new(record: &log::Record) -> Self {
     Self {
       level: record.level(),
-      message: record.args().to_string()
+      message: format!("[{}] {}", record.module_path().unwrap_or_default(), record.args().to_string())
     }
   }
 

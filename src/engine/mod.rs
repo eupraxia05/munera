@@ -2,12 +2,8 @@ use std::any::TypeId;
 use hecs::{EntityRef, Entity, World};
 use serde::{Serialize, Deserialize, ser::SerializeMap};
 use mac::{Comp, define_comps};
-use wgpu::RenderPassDescriptor;
 use std::cell::RefCell;
-use egui::FontDefinitions;
-use egui_demo_lib;
 
-use crate::gfx;
 use crate::ass;
 
 pub mod eng_log;
