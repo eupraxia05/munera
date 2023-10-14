@@ -9,6 +9,7 @@ impl Vec2i {
   }
 }
 
+#[derive(Copy, Clone)]
 pub struct Vec2u {
   pub x : u32,
   pub y : u32
@@ -16,8 +17,23 @@ pub struct Vec2u {
 
 impl Vec2u {
   pub fn new(x : u32, y : u32) -> Self {
-    Self { x: x, y: y }
+    Self { x, y }
   }
+}
+
+
+impl PartialEq for Vec2u {
+  fn eq(&self, other: &Self) -> bool {
+    self.x == other.x && self.y == other.y
+  }
+
+  fn ne(&self, other: &Self) -> bool {
+    self.x != other.x || self.y != other.y
+  }
+}
+
+impl Eq for Vec2u {
+
 }
 
 pub struct Vec2f {

@@ -11,7 +11,7 @@ use std::fs;
 use image::io::Reader as ImageReader;
 use image::Rgba;
 use std::fs::File;
-use crate::Result;
+use crate::{Result, math};
 
 const TOOLBAR_WIDTH: f32 = 64.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
@@ -39,7 +39,13 @@ pub struct Editor {
 }
 
 impl crate::engine::App for Editor {
-  fn build_ui(&mut self, asset_cache: &RefCell<crate::ass::AssetCache>, egui_context: &egui::Context) {
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
+    for dockable in &mut self.dock.dockables {
+      dockable.tick(dt, device, egui_rpass, queue);
+    }
+  }
+
+  fn build_ui(&mut self, asset_cache: &RefCell<crate::ass::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {
     TopBottomPanel::top("title_menu").show(egui_context, |ui| {
       self.build_title_menu(ui);
     });
@@ -315,7 +321,7 @@ impl Tool for PlayTool {
 
   fn build_tool_properties(&mut self, _asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
-      dock.dockables.push(Box::new(PlayDockable { }));
+      dock.dockables.push(Box::new(PlayDockable::new()));
     }
   }
 }
@@ -356,7 +362,8 @@ impl Tool for AssetCacheTool {
 
 pub trait Dockable {
   fn title(&self) -> String;
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui);
+  fn build_content(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui);
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) { }
 }
 
 struct AssetEditorDockable {
@@ -376,7 +383,7 @@ impl Dockable for AssetEditorDockable {
     self.ass_name.clone()
   }
 
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+  fn build_content(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
     let mut ass_cache = asset_cache.borrow_mut();
     let ass = ass_cache.borrow_asset_mut(&self.ass_name);
     if ass.is_some() {
@@ -385,15 +392,103 @@ impl Dockable for AssetEditorDockable {
   }
 }
 
-struct PlayDockable;
+struct PlayDockable {
+  requested_size: math::Vec2u,
+  curr_size: math::Vec2u,
+  image: Option<wgpu::Texture>,
+  tex_id: Option<egui::TextureId>
+}
+
+impl PlayDockable {
+  fn new() -> Self {
+    Self { image: None, requested_size: math::Vec2u::new(0, 0), curr_size: math::Vec2u::new(0, 0), tex_id: None }
+  }
+
+  fn update_img(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass) {
+    if self.requested_size.x == 0 || self.requested_size.y == 0 {
+      return;
+    }
+
+    let tex_desc = wgpu::TextureDescriptor {
+      label: Some("PlayDockable"),
+      size: wgpu::Extent3d { 
+        width: self.requested_size.x,
+        height: self.requested_size.y,
+        depth_or_array_layers: 1
+      },
+      mip_level_count: 1,
+      sample_count: 1,
+      dimension: wgpu::TextureDimension::D2,
+      format: wgpu::TextureFormat::Rgba16Float,
+      usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+      view_formats: &[wgpu::TextureFormat::Rgba16Float]
+    };
+
+    if self.image.is_some() {
+      if self.requested_size != self.curr_size {
+        let mut delta = egui::TexturesDelta::default();
+        delta.free.push(self.tex_id.unwrap());
+        egui_rpass.remove_textures(delta);
+        self.image.as_mut().unwrap().destroy();
+      } else {
+        return;
+      }
+    } 
+
+    let image = device.create_texture(&tex_desc);
+    log::info!("Creating play texture {} x {}", self.requested_size.x, self.requested_size.y);
+
+    self.tex_id = Some(egui_rpass.egui_texture_from_wgpu_texture(device, 
+      &image.create_view(&wgpu::TextureViewDescriptor::default()), 
+      wgpu::FilterMode::Nearest));
+
+    self.curr_size = self.requested_size;
+    self.image = Some(image);
+  }
+}
 
 impl Dockable for PlayDockable {
   fn title(&self) -> String {
     String::from("Play")
   }
 
-  fn build_content(&self, _asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
-    //ui.image(SizedTexture::new(screen_tex, Vec2::new(200.0, 200.0)));
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
+    self.update_img(device, egui_rpass);
+
+    if self.image.is_some() {
+      let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("PlayDockable")
+      });
+
+      let view = self.image.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
+
+      {
+        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+          label: Some("PlayDockable"),
+          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+              load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
+              store: true
+            }
+          })],
+          depth_stencil_attachment: None
+        });
+      }
+      
+      queue.submit(std::iter::once(encoder.finish()));
+    }
+  }
+
+  fn build_content(&mut self, _asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+    let size = ui.available_size();
+    self.requested_size = math::Vec2u::new(size.x as u32, size.y as u32);
+    
+    if self.tex_id.is_some() {
+      ui.image(self.tex_id.unwrap(), Vec2::new(self.curr_size.x as f32, self.curr_size.y as f32));
+
+    }
   }
 }
 
