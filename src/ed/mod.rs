@@ -1,4 +1,4 @@
-use egui::load::SizedTexture;
+//use egui::load::SizedTexture;
 use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, Vec2, Frame, Color32, RichText, TextureId, Stroke, Margin};
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
@@ -34,7 +34,34 @@ pub struct Editor {
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
   dock: Dock,
-  console_command_input_text: String
+  console_command_input_text: String,
+  title_img: egui_extras::RetainedImage
+}
+
+impl crate::engine::App for Editor {
+  fn build_ui(&mut self, asset_cache: &RefCell<crate::ass::AssetCache>, egui_context: &egui::Context) {
+    TopBottomPanel::top("title_menu").show(egui_context, |ui| {
+      self.build_title_menu(ui);
+    });
+    SidePanel::left("toolbar").exact_width(TOOLBAR_WIDTH)
+      .show(egui_context, |ui| {
+      self.build_toolbar(ui)
+    });
+    TopBottomPanel::bottom("console")
+      .resizable(true)
+      .min_height(MIN_CONSOLE_HEIGHT)
+      .frame(Frame::default()
+        .inner_margin(Margin::same(0.0)))
+      .show(egui_context, |ui| 
+    {
+      self.build_console(ui)
+    });
+    SidePanel::left("tool_properties").resizable(true).show(egui_context, |ui| {
+      self.build_tool_properties(asset_cache, ui)
+    });
+
+    self.build_dock(asset_cache, egui_context);
+  }
 }
 
 impl Editor {
@@ -46,56 +73,15 @@ impl Editor {
         Box::new(AssetCacheTool{ })],
       selected_tool_idx: None,
       dock: Dock::new(),
-      console_command_input_text: String::default()
+      console_command_input_text: String::default(),
+      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../ass/tuwuck.png"))
+        .expect("Failed to load title image!")
    }
-  }
-
-  pub fn run(&mut self, engine: &mut Engine) {
-    let mut gfx = engine.get_gfx().borrow_mut();
-    let window = gfx.get_window();
-    let events = gfx.get_events().clone();
-    let screen_tex = gfx.get_screen_egui_tex();
-
-    'main_loop : loop {
-      let fun = |ctx: &EguiContext| {
-        TopBottomPanel::top("title_menu").show(&ctx, |ui| {
-          self.build_title_menu(ui);
-        });
-        SidePanel::left("toolbar").exact_width(TOOLBAR_WIDTH)
-          .show(ctx, |ui| {
-          self.build_toolbar(ui)
-        });
-        TopBottomPanel::bottom("console")
-          .resizable(true)
-          .min_height(MIN_CONSOLE_HEIGHT)
-          .frame(Frame::default()
-            .inner_margin(Margin::same(0.0)))
-          .show(ctx, |ui| 
-        {
-          self.build_console(ui)
-        });
-        SidePanel::left("tool_properties").resizable(true).show(ctx, |ui| {
-          self.build_tool_properties(engine.get_asset_cache(), ui)
-        });
-
-        self.build_dock(engine.get_asset_cache(), ctx, screen_tex)
-      };
-
-      gfx.begin_frame();
-
-      gfx.get_egui().run(window, &events, fun);
-
-      gfx.end_frame();
-
-      if gfx.should_quit() {
-        break 'main_loop;
-      }
-    }
   }
 
   fn build_title_menu(&self, ui: &mut Ui) {
     egui::menu::bar(ui, |ui| {
-      ui.image(egui::include_image!("../../ass/tuwuck.png"));
+      ui.image(self.title_img.texture_id(ui.ctx()), Vec2::new(16.0, 16.0));
       ui.menu_button("File", |ui| {
         ui.menu_button("New...", |ui| {
           let _ = ui.button("Scene");
@@ -189,7 +175,7 @@ impl Editor {
     });
   }
 
-  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext, screen_tex: TextureId) {
+  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
         let mut close_idx = None;
@@ -210,7 +196,7 @@ impl Editor {
     });
     CentralPanel::default().show(ctx, |ui| {
       if self.dock.dockables.len() > self.dock.focused_dockable {
-        self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui, screen_tex);
+        self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui);
       }
     });
   }
@@ -370,7 +356,7 @@ impl Tool for AssetCacheTool {
 
 pub trait Dockable {
   fn title(&self) -> String;
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId);
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui);
 }
 
 struct AssetEditorDockable {
@@ -390,7 +376,7 @@ impl Dockable for AssetEditorDockable {
     self.ass_name.clone()
   }
 
-  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui, _screen_tex: TextureId) {
+  fn build_content(&self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
     let mut ass_cache = asset_cache.borrow_mut();
     let ass = ass_cache.borrow_asset_mut(&self.ass_name);
     if ass.is_some() {
@@ -406,8 +392,8 @@ impl Dockable for PlayDockable {
     String::from("Play")
   }
 
-  fn build_content(&self, _asset_cache: &RefCell<AssetCache>, ui: &mut Ui, screen_tex: TextureId) {
-    ui.image(SizedTexture::new(screen_tex, Vec2::new(200.0, 200.0)));
+  fn build_content(&self, _asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+    //ui.image(SizedTexture::new(screen_tex, Vec2::new(200.0, 200.0)));
   }
 }
 

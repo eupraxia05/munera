@@ -18,6 +18,7 @@ pub mod ass;
 /// A standard Result type used by various engine systems.
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub use egui;
 
 /// A standard Error type used by various engine systems.
 #[derive(Debug, Clone)]

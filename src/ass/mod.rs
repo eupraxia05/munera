@@ -2,7 +2,7 @@ use std::any::Any;
 use std::mem::size_of;
 use std::ops::Deref;
 use std::{collections::HashMap, fs};
-use egui::load::SizedTexture;
+//use egui::load::SizedTexture;
 use egui_extras::RetainedImage;
 use serde_binary::{Decode, Deserializer};
 use serde_binary::binary_stream::Endian;
@@ -62,8 +62,8 @@ impl Asset for ImageAsset {
           (disp_h as f32 * aspect) as u32);
         let disp_h = std::cmp::min(ui.available_height() as u32, 
           (disp_w as f32 / aspect) as u32);
-        ui.image(SizedTexture::new(self.retained_image.as_ref().unwrap()
-          .texture_id(ui.ctx()), egui::Vec2::new(disp_w as f32, disp_h as f32)));
+        ui.image(self.retained_image.as_ref().unwrap()
+          .texture_id(ui.ctx()), egui::Vec2::new(disp_w as f32, disp_h as f32));
       });
     });
   }
