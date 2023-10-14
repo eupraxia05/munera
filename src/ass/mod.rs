@@ -1,12 +1,9 @@
 use std::any::Any;
 use std::mem::size_of;
-use std::ops::Deref;
 use std::{collections::HashMap, fs};
-//use egui::load::SizedTexture;
 use egui_extras::RetainedImage;
 use serde_binary::{Decode, Deserializer};
 use serde_binary::binary_stream::Endian;
-use serde::{Serialize, Deserialize};
 use spirv_reflect::ShaderModule;
 
 use crate::math;
@@ -84,10 +81,10 @@ impl Asset for ImageAsset {
 }
 
 impl serde_binary::Encode for ImageAsset {
-  fn encode(&self, ser: &mut serde_binary::Serializer) 
+  fn encode(&self, _ser: &mut serde_binary::Serializer) 
     -> serde_binary::Result<()> 
   {
-    Ok(())
+    Err(serde_binary::Error::Custom("Unimplemented :(".to_string()))
   }
 }
 

@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use crate::ass;
 
-pub mod eng_log;
+pub mod logger;
 
 // A base trait to generate metadata for a component type.
 pub trait Comp {
@@ -55,7 +55,7 @@ pub struct Engine {
 
 impl Engine {
   pub fn new() -> Self {
-    log::set_logger(&eng_log::LOGGER)
+    log::set_logger(&logger::LOGGER)
       .map(|()| log::set_max_level(log::LevelFilter::Info))
       .expect("Couldn't set logger!");
 
@@ -83,7 +83,7 @@ impl Engine {
 
     let size = window.inner_size();
     let surface_format = surface.get_capabilities(&adapter).formats[0];
-    let mut surface_config = wgpu::SurfaceConfiguration {
+    let surface_config = wgpu::SurfaceConfiguration {
       usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
       format: surface_format,
       width: size.width as u32,
@@ -94,7 +94,7 @@ impl Engine {
     };
     surface.configure(&device, &surface_config);
 
-    let mut egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+    let egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
       physical_width: size.width as u32,
       physical_height: size.height as u32,
       scale_factor: window.scale_factor(),
