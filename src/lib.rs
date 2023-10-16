@@ -7,7 +7,7 @@ pub mod engine;
 pub mod math;
 
 /// Editor implementation.
-pub mod ed;
+pub mod editor;
 
 /// Asset system implementation.
 pub mod assets;
@@ -16,6 +16,9 @@ pub mod assets;
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub use egui;
+pub use log;
+pub use wgpu;
+pub use egui_wgpu_backend;
 
 /// A standard Error type used by various engine systems.
 #[derive(Debug, Clone)]

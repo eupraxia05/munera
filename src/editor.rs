@@ -82,7 +82,7 @@ impl Editor {
       selected_tool_idx: None,
       dock: Dock::new(),
       console_command_input_text: String::default(),
-      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../ass/munera.png"))
+      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../ass/munera.png"))
         .expect("Failed to load title image!")
    }
   }
@@ -234,7 +234,7 @@ impl AssetBrowserTool {
         Box::new(MeshImportHandler::new()), Box::new(ShaderImportHandler::new())],
       selected_asset: None,
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_browser_tool_button", 
-        include_bytes!("../../ass/asset_browser.png")).expect("Failed to load image!")
+        include_bytes!("../ass/asset_browser.png")).expect("Failed to load image!")
     }
   }
 }
@@ -347,7 +347,7 @@ impl PlayTool {
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("play_tool_button", 
-        include_bytes!("../../ass/play.png")).expect("Failed to load image!")
+        include_bytes!("../ass/play.png")).expect("Failed to load image!")
     }
   }
 }
@@ -372,7 +372,7 @@ impl AssetCacheTool {
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_cache_tool_button", 
-        include_bytes!("../../ass/registry_editor.png")).expect("Failed to load image!")
+        include_bytes!("../ass/registry_editor.png")).expect("Failed to load image!")
     }
   }
 }
