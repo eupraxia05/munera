@@ -13,7 +13,7 @@ use image::Rgba;
 use std::fs::File;
 use crate::{Result, math};
 
-const TOOLBAR_WIDTH: f32 = 64.0f32;
+const TOOLBAR_WIDTH: f32 = 32.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
 pub struct Dock {
@@ -49,7 +49,9 @@ impl crate::engine::App for Editor {
     TopBottomPanel::top("title_menu").show(egui_context, |ui| {
       self.build_title_menu(ui);
     });
-    SidePanel::left("toolbar").exact_width(TOOLBAR_WIDTH)
+    SidePanel::left("toolbar")
+      .exact_width(TOOLBAR_WIDTH)
+      .resizable(false)
       .show(egui_context, |ui| {
       self.build_toolbar(ui)
     });
@@ -75,8 +77,9 @@ impl Editor {
     Self {
       tools: vec![
         Box::new(AssetBrowserTool::new()), 
-        Box::new(PlayTool{ }),
-        Box::new(AssetCacheTool{ })],
+        Box::new(PlayTool::new()),
+        Box::new(AssetCacheTool::new())
+      ],
       selected_tool_idx: None,
       dock: Dock::new(),
       console_command_input_text: String::default(),
@@ -106,13 +109,14 @@ impl Editor {
   }
 
   fn build_toolbar(&mut self, ui: &mut Ui) {
-    ui.label("Toolbar");
-    ui.separator();
-    for (idx, tool) in self.tools.iter().enumerate() {
-      if ui.button(tool.name()).clicked() {
-        self.selected_tool_idx = Some(idx);
+    ui.vertical_centered(|ui| {
+      for (idx, tool) in self.tools.iter().enumerate() {
+        let button = egui::ImageButton::new(tool.button_img().texture_id(ui.ctx()), Vec2::new(32.0, 32.0));
+        if ui.add(button).clicked() {
+          self.selected_tool_idx = Some(idx);
+        }
       }
-    }
+    });
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
@@ -210,6 +214,7 @@ impl Editor {
 
 trait Tool {
   fn name(&self) -> &'static str;
+  fn button_img(&self) -> &egui_extras::RetainedImage;
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui);
 }
 
@@ -218,6 +223,7 @@ struct AssetBrowserTool {
   target_path: String,
   import_handlers: Vec<Box<dyn ImportHandler>>,
   selected_asset: Option<String>,
+  button_img: egui_extras::RetainedImage
 }
 
 impl AssetBrowserTool {
@@ -228,6 +234,8 @@ impl AssetBrowserTool {
       import_handlers: vec![Box::new(ImageImportHandler::new()), 
         Box::new(MeshImportHandler::new()), Box::new(ShaderImportHandler::new())],
       selected_asset: None,
+      button_img: egui_extras::RetainedImage::from_image_bytes("asset_browser_tool_button", 
+        include_bytes!("../../ass/asset_browser.png")).expect("Failed to load image!")
     }
   }
 }
@@ -235,6 +243,10 @@ impl AssetBrowserTool {
 impl Tool for AssetBrowserTool {
   fn name(&self) -> &'static str {
     "Asset Browser"
+  }
+
+  fn button_img(&self) -> &egui_extras::RetainedImage {
+    &self.button_img
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
@@ -312,16 +324,31 @@ impl Tool for AssetBrowserTool {
   }
 }
 
-struct PlayTool;
+struct PlayTool {
+  button_img: egui_extras::RetainedImage
+}
 
 impl Tool for PlayTool {
   fn name(&self) -> &'static str {
     "Play"
   }
 
+  fn button_img(&self) -> &egui_extras::RetainedImage {
+    &self.button_img
+  }
+
   fn build_tool_properties(&mut self, _asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
       dock.dockables.push(Box::new(PlayDockable::new()));
+    }
+  }
+}
+
+impl PlayTool {
+  fn new() -> Self {
+    Self {
+      button_img: egui_extras::RetainedImage::from_image_bytes("play_tool_button", 
+        include_bytes!("../../ass/play.png")).expect("Failed to load image!")
     }
   }
 }
@@ -338,11 +365,26 @@ fn to_mem_size_str(size: usize) -> String {
   format!("{} B", size)
 }
 
-struct AssetCacheTool;
+struct AssetCacheTool {
+  button_img: egui_extras::RetainedImage
+}
+
+impl AssetCacheTool {
+  fn new() -> Self {
+    Self {
+      button_img: egui_extras::RetainedImage::from_image_bytes("asset_cache_tool_button", 
+        include_bytes!("../../ass/registry_editor.png")).expect("Failed to load image!")
+    }
+  }
+}
 
 impl Tool for AssetCacheTool {
   fn name(&self) -> &'static str {
     "Asset Cache"
+  }
+
+  fn button_img(&self) -> &egui_extras::RetainedImage {
+    &self.button_img
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, 

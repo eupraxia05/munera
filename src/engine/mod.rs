@@ -88,7 +88,7 @@ impl Engine {
       format: surface_format,
       width: size.width as u32,
       height: size.height as u32,
-      present_mode: wgpu::PresentMode::Fifo,
+      present_mode: wgpu::PresentMode::AutoVsync,
       alpha_mode: wgpu::CompositeAlphaMode::Opaque,
       view_formats: vec![]
     };
