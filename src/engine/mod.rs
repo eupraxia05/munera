@@ -156,7 +156,7 @@ impl Engine {
             }
           };
 
-          app.tick(0.0, &self.device, &mut self.egui_rpass, &self.queue);
+          app.tick(0.0, &self.device, &self.asset_cache, &mut self.egui_rpass, &self.queue);
 
           let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
@@ -207,6 +207,6 @@ impl Engine {
 }
 
 pub trait App {
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue);
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue);
   fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device);
 }

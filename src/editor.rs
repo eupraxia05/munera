@@ -38,9 +38,9 @@ pub struct Editor {
 }
 
 impl crate::engine::App for Editor {
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
     for dockable in &mut self.dock.dockables {
-      dockable.tick(dt, device, egui_rpass, queue);
+      dockable.tick(dt, device, asset_cache, egui_rpass, queue);
     }
   }
 
@@ -64,7 +64,7 @@ impl crate::engine::App for Editor {
       self.build_console(ui)
     });
     SidePanel::left("tool_properties").resizable(true).show(egui_context, |ui| {
-      self.build_tool_properties(asset_cache, ui)
+      self.build_tool_properties(asset_cache, ui, device)
     });
 
     self.build_dock(asset_cache, egui_context);
@@ -72,18 +72,20 @@ impl crate::engine::App for Editor {
 }
 
 impl Editor {
-  pub fn new() -> Self {
+  pub fn new<GameAppType>() -> Self
+    where GameAppType: crate::engine::App + 'static + Default
+  {
     Self {
       tools: vec![
         Box::new(AssetBrowserTool::new()), 
-        Box::new(PlayTool::new()),
+        Box::new(PlayTool::<GameAppType>::new()),
         Box::new(AssetCacheTool::new())
       ],
       selected_tool_idx: None,
       dock: Dock::new(),
       console_command_input_text: String::default(),
       title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../ass/munera.png"))
-        .expect("Failed to load title image!")
+        .expect("Failed to load title image!"),
    }
   }
 
@@ -118,13 +120,13 @@ impl Editor {
     });
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui, device: &wgpu::Device) {
     ScrollArea::new([false, true]).show(ui, |ui| {
       if self.selected_tool_idx.is_some() {
         let tool = &mut self.tools[self.selected_tool_idx.unwrap()];
         ui.label(tool.name());
         ui.separator();
-        tool.build_tool_properties(asset_cache, &mut self.dock, ui);
+        tool.build_tool_properties(asset_cache, &mut self.dock, ui, device);
       } else {
         ui.label("Tool Properties");
         ui.separator();
@@ -214,7 +216,7 @@ impl Editor {
 trait Tool {
   fn name(&self) -> &'static str;
   fn button_img(&self) -> &egui_extras::RetainedImage;
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui);
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device);
 }
 
 struct AssetBrowserTool {
@@ -248,7 +250,7 @@ impl Tool for AssetBrowserTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) {
     ui.collapsing("Import", |ui| {
       ui.horizontal(|ui| {
         ui.label("Source");
@@ -323,11 +325,16 @@ impl Tool for AssetBrowserTool {
   }
 }
 
-struct PlayTool {
-  button_img: egui_extras::RetainedImage
+struct PlayTool<GameAppType>
+  where GameAppType : crate::engine::App + Default
+{
+  button_img: egui_extras::RetainedImage,
+  phantom_data: std::marker::PhantomData<GameAppType>
 }
 
-impl Tool for PlayTool {
+impl<GameAppType> Tool for PlayTool<GameAppType>
+  where GameAppType : crate::engine::App + Default + 'static
+{
   fn name(&self) -> &'static str {
     "Play"
   }
@@ -336,18 +343,21 @@ impl Tool for PlayTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, _asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, _asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) {
     if ui.button("Play!").clicked() {
-      dock.dockables.push(Box::new(PlayDockable::new()));
+      dock.dockables.push(Box::new(PlayDockable::<GameAppType>::new(device)));
     }
   }
 }
 
-impl PlayTool {
+impl<GameAppType> PlayTool<GameAppType>
+  where GameAppType : crate::engine::App + Default
+{
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("play_tool_button", 
-        include_bytes!("../ass/play.png")).expect("Failed to load image!")
+        include_bytes!("../ass/play.png")).expect("Failed to load image!"),
+      phantom_data: std::marker::PhantomData::default()
     }
   }
 }
@@ -387,7 +397,7 @@ impl Tool for AssetCacheTool {
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, 
-    _dock: &mut Dock, ui: &mut Ui) 
+    _dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) 
   {
     let cache = asset_cache.borrow();
     let assets = cache.borrow_all_assets();
@@ -404,7 +414,7 @@ impl Tool for AssetCacheTool {
 pub trait Dockable {
   fn title(&self) -> String;
   fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui);
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) { }
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) { }
 }
 
 struct AssetEditorDockable {
@@ -433,16 +443,29 @@ impl Dockable for AssetEditorDockable {
   }
 }
 
-struct PlayDockable {
+struct PlayDockable<GameAppType> {
   requested_size: math::Vec2u,
   curr_size: math::Vec2u,
   image: Option<wgpu::Texture>,
-  tex_id: Option<egui::TextureId>
+  tex_id: Option<egui::TextureId>,
+  game_app: GameAppType,
+  egui_rpass: egui_wgpu_backend::RenderPass,
+  egui_ctx: egui::Context
 }
 
-impl PlayDockable {
-  fn new() -> Self {
-    Self { image: None, requested_size: math::Vec2u::new(0, 0), curr_size: math::Vec2u::new(0, 0), tex_id: None }
+impl<GameAppType> PlayDockable<GameAppType>
+  where GameAppType: crate::engine::App + Default  
+{
+  fn new(device: &wgpu::Device) -> Self {
+    Self { 
+      image: None, 
+      requested_size: math::Vec2u::new(0, 0), 
+      curr_size: math::Vec2u::new(0, 0), 
+      tex_id: None,
+      game_app: GameAppType::default(),
+      egui_rpass: egui_wgpu_backend::RenderPass::new(device, wgpu::TextureFormat::Rgba16Float, 1),
+      egui_ctx: egui::Context::default()
+    }
   }
 
   fn update_img(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass) {
@@ -488,36 +511,36 @@ impl PlayDockable {
   }
 }
 
-impl Dockable for PlayDockable {
+impl<GameAppType> Dockable for PlayDockable<GameAppType>
+  where GameAppType: crate::engine::App + Default
+{
   fn title(&self) -> String {
     String::from("Play")
   }
 
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
     self.update_img(device, egui_rpass);
 
     if self.image.is_some() {
+      let tex_view = self.image.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
+      self.egui_ctx.begin_frame(egui::RawInput::default());
+      self.game_app.build_ui(asset_cache, &self.egui_ctx, device);
+      let result = self.egui_ctx.end_frame();
+      let paint_jobs = self.egui_ctx.tessellate(result.shapes);
+
       let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("PlayDockable")
+        label: Some("PlayDockable render encoder")
       });
 
-      let view = self.image.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
+      let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
+        physical_width: self.image.as_ref().unwrap().width(),
+        physical_height: self.image.as_ref().unwrap().height(),
+        scale_factor: 1.0
+      };
 
-      {
-        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-          label: Some("PlayDockable"),
-          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-              load: wgpu::LoadOp::Clear(wgpu::Color::BLUE),
-              store: true
-            }
-          })],
-          depth_stencil_attachment: None
-        });
-      }
-      
+      self.egui_rpass.add_textures(device, queue, &result.textures_delta);
+      self.egui_rpass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
+      self.egui_rpass.execute(&mut encoder, &tex_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK));
       queue.submit(std::iter::once(encoder.finish()));
     }
   }
