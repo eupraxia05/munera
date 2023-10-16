@@ -6,8 +6,6 @@ use std::cell::RefCell;
 
 use crate::assets;
 
-pub mod logger;
-
 // A base trait to generate metadata for a component type.
 pub trait Comp {
   fn ent_has(ent: EntityRef) -> bool;
@@ -55,7 +53,7 @@ pub struct Engine {
 
 impl Engine {
   pub fn new() -> Self {
-    log::set_logger(&logger::LOGGER)
+    log::set_logger(&crate::logger::LOGGER)
       .map(|()| log::set_max_level(log::LevelFilter::Info))
       .expect("Couldn't set logger!");
 

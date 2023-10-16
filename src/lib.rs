@@ -3,6 +3,9 @@
 /// Core engine features.
 pub mod engine;
 
+/// A logger implementation.
+pub mod logger;
+
 /// Vector, matrix, and spatial math utilities.
 pub mod math;
 

@@ -3,7 +3,7 @@ use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, 
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
-use crate::engine::{Engine, logger};
+use crate::engine::{Engine};
 use std::io::Write;
 use std::cell::RefCell;
 use std::fs;
@@ -166,7 +166,7 @@ impl Editor {
         ui.style_mut().spacing.item_spacing = Vec2::new(4.0, 4.0);
         ui.style_mut().spacing.indent = 8.0;
 
-        let messages = logger::LOGGER.messages.lock()
+        let messages = crate::logger::LOGGER.messages.lock()
           .expect("Couldn't lock logger messages!");
         for message in messages.clone() {
           let color = match message.level() {
