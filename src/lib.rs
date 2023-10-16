@@ -10,7 +10,7 @@ pub mod math;
 pub mod ed;
 
 /// Asset system implementation.
-pub mod ass;
+pub mod assets;
 
 /// A standard Result type used by various engine systems.
 pub type Result<T> = std::result::Result<T, Error>;

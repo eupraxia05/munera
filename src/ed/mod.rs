@@ -3,7 +3,6 @@ use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, 
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
-use crate::ass::{AssetCache, ShaderAsset, ShaderType};
 use crate::engine::{Engine, logger};
 use std::io::Write;
 use std::cell::RefCell;
@@ -11,7 +10,7 @@ use std::fs;
 use image::io::Reader as ImageReader;
 use image::Rgba;
 use std::fs::File;
-use crate::{Result, math};
+use crate::{assets, Result, math};
 
 const TOOLBAR_WIDTH: f32 = 32.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
@@ -45,7 +44,7 @@ impl crate::engine::App for Editor {
     }
   }
 
-  fn build_ui(&mut self, asset_cache: &RefCell<crate::ass::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {
+  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {
     TopBottomPanel::top("title_menu").show(egui_context, |ui| {
       self.build_title_menu(ui);
     });
@@ -119,7 +118,7 @@ impl Editor {
     });
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
     ScrollArea::new([false, true]).show(ui, |ui| {
       if self.selected_tool_idx.is_some() {
         let tool = &mut self.tools[self.selected_tool_idx.unwrap()];
@@ -185,7 +184,7 @@ impl Editor {
     });
   }
 
-  fn build_dock(&mut self, asset_cache: &RefCell<AssetCache>, ctx: &EguiContext) {
+  fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext) {
     TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
         let mut close_idx = None;
@@ -215,7 +214,7 @@ impl Editor {
 trait Tool {
   fn name(&self) -> &'static str;
   fn button_img(&self) -> &egui_extras::RetainedImage;
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui);
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui);
 }
 
 struct AssetBrowserTool {
@@ -249,7 +248,7 @@ impl Tool for AssetBrowserTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui) {
     ui.collapsing("Import", |ui| {
       ui.horizontal(|ui| {
         ui.label("Source");
@@ -337,7 +336,7 @@ impl Tool for PlayTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, _asset_cache: &RefCell<AssetCache>, dock: &mut Dock, ui: &mut Ui) {
+  fn build_tool_properties(&mut self, _asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui) {
     if ui.button("Play!").clicked() {
       dock.dockables.push(Box::new(PlayDockable::new()));
     }
@@ -387,7 +386,7 @@ impl Tool for AssetCacheTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<AssetCache>, 
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, 
     _dock: &mut Dock, ui: &mut Ui) 
   {
     let cache = asset_cache.borrow();
@@ -404,7 +403,7 @@ impl Tool for AssetCacheTool {
 
 pub trait Dockable {
   fn title(&self) -> String;
-  fn build_content(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui);
+  fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui);
   fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) { }
 }
 
@@ -413,7 +412,7 @@ struct AssetEditorDockable {
 }
 
 impl AssetEditorDockable {
-  fn new(asset_cache: &RefCell<AssetCache>, path: &String) -> Result<Self> {
+  fn new(asset_cache: &RefCell<assets::AssetCache>, path: &String) -> Result<Self> {
     let mut cache = asset_cache.borrow_mut();
     cache.load_file(path)?;
     Ok( Self { ass_name: path.clone() } )
@@ -425,7 +424,7 @@ impl Dockable for AssetEditorDockable {
     self.ass_name.clone()
   }
 
-  fn build_content(&mut self, asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+  fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
     let mut ass_cache = asset_cache.borrow_mut();
     let ass = ass_cache.borrow_asset_mut(&self.ass_name);
     if ass.is_some() {
@@ -523,7 +522,7 @@ impl Dockable for PlayDockable {
     }
   }
 
-  fn build_content(&mut self, _asset_cache: &RefCell<AssetCache>, ui: &mut Ui) {
+  fn build_content(&mut self, _asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
     let size = ui.available_size();
     self.requested_size = math::Vec2u::new(size.x as u32, size.y as u32);
     
@@ -665,11 +664,11 @@ impl ImportHandler for ShaderImportHandler {
               log::error!("Failed to compile {}: {}", import_path, err.to_string());
             },
             Ok(spirv) => {
-              let mut ass = ShaderAsset::default();
+              let mut ass = assets::ShaderAsset::default();
               ass.shader_type = match shader_kind {
-                ShaderKind::Vertex => ShaderType::Vertex,
-                ShaderKind::Fragment => ShaderType::Fragment,
-                _ => ShaderType::Vertex
+                ShaderKind::Vertex => assets::ShaderType::Vertex,
+                ShaderKind::Fragment => assets::ShaderType::Fragment,
+                _ => assets::ShaderType::Vertex
               };
               ass.code = spirv.as_binary_u8().to_vec();
               match serde_binary::encode(&ass, 

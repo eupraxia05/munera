@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize, ser::SerializeMap};
 use mac::{Comp, define_comps};
 use std::cell::RefCell;
 
-use crate::ass;
+use crate::assets;
 
 pub mod logger;
 
@@ -41,7 +41,7 @@ impl CompType {
 /// A context containing all engine systems, assets, and metadata.
 pub struct Engine {
   comp_types: Vec<CompType>,
-  asset_cache: RefCell<ass::AssetCache>,
+  asset_cache: RefCell<assets::AssetCache>,
   event_loop: winit::event_loop::EventLoop<()>,
   window: winit::window::Window,
   instance: wgpu::Instance,
@@ -106,7 +106,7 @@ impl Engine {
 
     Self { 
       comp_types: define_comps!(), 
-      asset_cache: RefCell::new(ass::AssetCache::new()),
+      asset_cache: RefCell::new(assets::AssetCache::new()),
       event_loop,
       window,
       instance,
@@ -201,12 +201,12 @@ impl Engine {
     &self.comp_types
   }
 
-  pub fn get_asset_cache(&self) -> &RefCell<ass::AssetCache> {
+  pub fn get_asset_cache(&self) -> &RefCell<assets::AssetCache> {
     &self.asset_cache
   }
 }
 
 pub trait App {
   fn tick(&mut self, dt: f32, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue);
-  fn build_ui(&mut self, asset_cache: &RefCell<crate::ass::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device);
+  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device);
 }
