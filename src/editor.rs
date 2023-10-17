@@ -536,7 +536,10 @@ impl<GameAppType> Dockable for PlayDockable<GameAppType>
 
     if self.image.is_some() {
       let tex_view = self.image.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
-      self.egui_ctx.begin_frame(egui::RawInput::default());
+      let mut input = egui::RawInput::default();
+      input.screen_rect = Some(egui::Rect::from_min_max(egui::Pos2::new(0.0, 0.0), 
+        egui::Pos2::new(self.curr_size.x as f32, self.curr_size.y as f32)));
+      self.egui_ctx.begin_frame(input);
       self.game_app.build_ui(asset_cache, &self.egui_ctx, device);
       let result = self.egui_ctx.end_frame();
       let paint_jobs = self.egui_ctx.tessellate(result.shapes);
