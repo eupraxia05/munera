@@ -11,7 +11,6 @@ use crate::Result;
 use crate::Error;
 
 pub trait Asset : serde_binary::Encode + serde_binary::Decode {
-  fn as_any(&self) -> &dyn Any;
   fn size_bytes(&self) -> usize;
   fn build_dockable_content(&mut self, ui: &mut egui::Ui);
   fn set_name(&mut self, name: &String);
@@ -37,10 +36,6 @@ impl ImageAsset {
 }
 
 impl Asset for ImageAsset {
-  fn as_any(&self) -> &dyn Any {
-    self
-  }
-
   fn size_bytes(&self) -> usize {
     self.data.len() * size_of::<u8>() + size_of::<math::Vec2u>()
   }
@@ -124,10 +119,6 @@ impl ShaderAsset {
 }
 
 impl Asset for ShaderAsset {
-  fn as_any(&self) -> &dyn Any {
-    self
-  }
-
   fn size_bytes(&self) -> usize {
     size_of::<Self>() + self.code.len() * size_of::<u8>()
   }
@@ -261,10 +252,6 @@ impl<'de> serde::Deserialize<'de> for SceneAsset {
 }
 
 impl Asset for SceneAsset {
-  fn as_any(&self) -> &dyn Any {
-    self
-  }
-
   fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
     ui.label("Scene!");
   }
