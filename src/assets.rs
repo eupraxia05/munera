@@ -204,6 +204,94 @@ impl Default for ShaderAsset {
   }
 }
 
+pub struct SceneAsset {
+  name: String,
+  world: hecs::World,
+}
+
+impl serde_binary::Decode for SceneAsset {
+  fn decode(&mut self, de: &mut Deserializer) -> serde_binary::Result<()> {
+    Err(serde_binary::Error::Custom("Not implemented yet.".to_string()))
+  }
+}
+
+impl serde_binary::Encode for SceneAsset {
+  fn encode(&self, ser: &mut serde_binary::Serializer) -> serde_binary::Result<()> {
+    Err(serde_binary::Error::Custom("Not implemented yet.".to_string())) 
+  }
+}
+
+pub struct HecsEntSerializeContext;
+
+impl HecsEntSerializeContext {
+  fn new() -> Self {
+    Self { }
+  }
+}
+
+impl hecs::serialize::row::SerializeContext for HecsEntSerializeContext {
+  fn serialize_entity<S>(&mut self, entity: hecs::EntityRef<'_>, mut map: S) -> std::result::Result<S::Ok, S::Error>
+    where S: serde::ser::SerializeMap 
+  {
+    if entity.has::<crate::engine::NameComp>() {
+      if let Some(name) = entity.get::<&crate::engine::NameComp>() {
+        map.serialize_entry("name", &name.name)?;
+      }
+    }
+
+    map.end()
+  }
+}
+
+impl serde::Serialize for SceneAsset {
+  fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where S: serde::Serializer 
+  {
+    let mut ctx = HecsEntSerializeContext::new();
+    hecs::serialize::row::serialize(&self.world, &mut ctx, serializer)
+  }
+}
+
+impl<'de> serde::Deserialize<'de> for SceneAsset {
+  fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where D: serde::Deserializer<'de> 
+  {
+    Err(serde::de::Error::custom("Not implemented yet.")) 
+  }
+}
+
+impl Asset for SceneAsset {
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+
+  fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
+    ui.label("Scene!");
+  }
+
+  fn post_load(&mut self) {
+    
+  }
+
+  fn set_name(&mut self, name: &String) {
+    self.name = name.clone();
+  }
+  
+  fn size_bytes(&self) -> usize {
+    // not accurate, but not sure how to get the byte size of a world
+    return size_of::<hecs::World>();
+  }
+}
+
+impl Default for SceneAsset {
+  fn default() -> Self {
+    Self {
+      name: "".to_string(),
+      world: hecs::World::new()
+    }
+  }
+}
+
 pub struct AssetCache {
   assets: HashMap<String, Box<dyn Asset>>
 }

@@ -93,9 +93,7 @@ impl Editor {
     egui::menu::bar(ui, |ui| {
       ui.image(self.title_img.texture_id(ui.ctx()), Vec2::new(24.0, 24.0));
       ui.menu_button("File", |ui| {
-        ui.menu_button("New...", |ui| {
-          let _ = ui.button("Scene");
-        });
+        let _ = ui.button("Save All");
       });
       ui.menu_button("Project", |ui| {
         let _ = ui.button("Project Settings");
@@ -224,7 +222,8 @@ struct AssetBrowserTool {
   target_path: String,
   import_handlers: Vec<Box<dyn ImportHandler>>,
   selected_asset: Option<String>,
-  button_img: egui_extras::RetainedImage
+  button_img: egui_extras::RetainedImage,
+  new_asset_name: String
 }
 
 impl AssetBrowserTool {
@@ -236,7 +235,8 @@ impl AssetBrowserTool {
         Box::new(MeshImportHandler::new()), Box::new(ShaderImportHandler::new())],
       selected_asset: None,
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_browser_tool_button", 
-        include_bytes!("../ass/asset_browser.png")).expect("Failed to load image!")
+        include_bytes!("../ass/asset_browser.png")).expect("Failed to load image!"),
+      new_asset_name: String::from(""),
     }
   }
 }
@@ -251,6 +251,19 @@ impl Tool for AssetBrowserTool {
   }
 
   fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) {
+    ui.collapsing("New", |ui| {
+      ui.horizontal(|ui| {
+        ui.label("Name");
+        ui.separator();
+        ui.text_edit_singleline(&mut self.new_asset_name);
+      });
+
+      if ui.button("Scene").clicked() {
+        let scene = crate::assets::SceneAsset::default();
+        let ser = serde_json::to_string_pretty(&scene).expect("Couldn't serialize default scene!");
+        std::fs::write(format!("ass/{}.ass", self.new_asset_name), ser).expect("Couldn't write to file!");
+      }
+    });
     ui.collapsing("Import", |ui| {
       ui.horizontal(|ui| {
         ui.label("Source");
