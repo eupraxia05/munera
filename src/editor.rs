@@ -30,24 +30,34 @@ impl<'a> egui_dock::TabViewer for DockTabViewer<'a> {
 
   fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
     match tab {
-      DockTab::Asset(asset_name) => asset_name.as_str().into(),
+      DockTab::Asset { name, viewer } => name.as_str().into(),
     }
   }
   
   fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
     match tab {
-      DockTab::Asset(asset_name) => {
+      DockTab::Asset { name, viewer } => {
         let mut cache = self.asset_cache.borrow_mut();
-        cache.load_file(asset_name);
-        let ass = cache.borrow_asset_generic_mut(asset_name);
-        ass.unwrap().build_dockable_content(ui);
+        if let Some(ass) = cache.borrow_asset_generic_mut(name) {
+          viewer.build_dockable_content(ass, ui)
+        }
       }
     }
   }
 }
 
 pub enum DockTab {
-  Asset(String),
+  Asset { name: String, viewer: Box<dyn crate::assets::AssetTabViewer> },
+}
+
+impl DockTab {
+  fn from_asset(name: &String, asset_cache: &std::cell::RefCell<assets::AssetCache>) -> Self {
+    let mut cache = asset_cache.borrow_mut();
+    cache.load_file(name);
+    let ass = cache.borrow_asset_generic_mut(name);
+    let viewer = ass.unwrap().create_tab_viewer();
+    Self::Asset { name: name.clone(), viewer }
+  }
 }
 
 pub struct Editor {
@@ -351,7 +361,7 @@ impl Tool for AssetBrowserTool {
       let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
       if ui.selectable_label(is_selected, name).clicked() {
         let file_path = String::from("./ass/") + &String::from(name);
-        dock.push_to_focused_leaf(DockTab::Asset(file_path));
+        dock.push_to_focused_leaf(DockTab::from_asset(&file_path, asset_cache));
       }
     }
   }

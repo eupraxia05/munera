@@ -7,7 +7,7 @@ use serde_binary::{Decode, Deserializer};
 use serde_binary::binary_stream::Endian;
 use spirv_reflect::ShaderModule;
 
-use crate::math;
+use crate::{math, engine};
 use crate::Result;
 use crate::Error;
 
@@ -16,10 +16,14 @@ pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any {
   fn as_any_mut(&mut self) -> &mut dyn Any;
   fn as_asset(&self) -> &dyn Asset;
   fn size_bytes(&self) -> usize;
-  fn build_dockable_content(&mut self, ui: &mut egui::Ui);
   fn set_name(&mut self, name: &String);
   fn post_load(&mut self);
   fn get_asset_type_name(&self) -> &str;
+  fn create_tab_viewer(&self) -> Box<dyn AssetTabViewer>;
+}
+
+pub trait AssetTabViewer {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui);
 }
 
 pub struct ImageAsset {
@@ -65,24 +69,8 @@ impl Asset for ImageAsset {
     self.data.len() * size_of::<u8>() + size_of::<math::Vec2u>()
   }
 
-  fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
-    egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
-      ui.label(format!("Resolution: {} x {}", self.size.x, self.size.y));
-    });
-    egui::CentralPanel::default().show_inside(ui, |ui| {
-      ui.centered_and_justified(|ui| {
-        let w = self.size.x;
-        let h = self.size.y;
-        let aspect = w as f32 / h as f32;
-        let disp_h = std::cmp::min(ui.available_height() as u32, h);
-        let disp_w = std::cmp::min(ui.available_width() as u32, 
-          (disp_h as f32 * aspect) as u32);
-        let disp_h = std::cmp::min(ui.available_height() as u32, 
-          (disp_w as f32 / aspect) as u32);
-        ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.retained_image.as_ref().unwrap()
-          .texture_id(ui.ctx()), egui::Vec2::new(disp_w as f32, disp_h as f32))));
-      });
-    });
+  fn create_tab_viewer(&self) -> Box<dyn AssetTabViewer> {
+    Box::new(ImageAssetTabViewer { })
   }
 
   fn set_name(&mut self, name: &String) {
@@ -115,6 +103,34 @@ impl serde_binary::Decode for ImageAsset {
     self.data = de.reader.read_bytes(self.size.y as usize * self.size.x as usize * size_of::<u8>() as usize * 4).expect("Failed to read data!");
     
     Ok(())
+  }
+}
+
+struct ImageAssetTabViewer;
+
+impl AssetTabViewer for ImageAssetTabViewer {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) {
+    if let Some(img) = asset.as_any().downcast_ref::<ImageAsset>() {
+      egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
+        ui.label(format!("Resolution: {} x {}", img.size.x, img.size.y));
+      });
+      egui::CentralPanel::default().show_inside(ui, |ui| {
+        ui.centered_and_justified(|ui| {
+          let w = img.size.x;
+          let h = img.size.y;
+          let aspect = w as f32 / h as f32;
+          let disp_h = std::cmp::min(ui.available_height() as u32, h);
+          let disp_w = std::cmp::min(ui.available_width() as u32, 
+            (disp_h as f32 * aspect) as u32);
+          let disp_h = std::cmp::min(ui.available_height() as u32, 
+            (disp_w as f32 / aspect) as u32);
+          ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(img.retained_image.as_ref().unwrap()
+            .texture_id(ui.ctx()), egui::Vec2::new(disp_w as f32, disp_h as f32))));
+        });
+      });
+    } else {
+      log::error!("ImageAssetTabViewer was used for an asset that wasn't an image!");
+    }
   }
 }
 
@@ -164,34 +180,8 @@ impl Asset for ShaderAsset {
     size_of::<Self>() + self.code.len() * size_of::<u8>()
   }
 
-  fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
-    ui.label(format!("Type: {}", self.shader_type.to_string()));
-
-    let module = self.shader_module.as_ref().expect("Null shader module!");
-    ui.label(format!("Source file: {}", module.get_source_file()));
-    ui.label(format!("Source language: {:?}", module.get_source_language()));
-    ui.label(format!("Source language version: {}", module.get_source_language_version()));
-    ui.collapsing("Input Variables", |ui| {
-      if let Ok(input_vars) = module.enumerate_input_variables(None) {
-        input_vars.iter().for_each(|v| {
-          ui.label(format!("{}: location {}", v.name, v.location));
-        });
-      }
-    });
-    ui.collapsing("Output Variables", |ui| {
-      if let Ok(output_vars) = module.enumerate_output_variables(None) {
-        output_vars.iter().for_each(|v| {
-          ui.label(format!("{}: location {}", v.name, v.location));
-        });
-      }
-    });
-    ui.collapsing("Descriptor Sets", |ui| {
-      if let Ok(descriptor_sets) = module.enumerate_descriptor_sets(None) {
-        descriptor_sets.iter().for_each(|d| {
-          ui.label(format!("{}", d.set));
-        });
-      }
-    });
+  fn create_tab_viewer(&self) -> Box<dyn AssetTabViewer> {
+    Box::new(ShaderAssetTabViewer{ })
   }
 
   fn set_name(&mut self, name: &String) {
@@ -233,6 +223,44 @@ impl serde_binary::Decode for ShaderAsset {
 impl Default for ShaderAsset {
   fn default() -> Self {
       Self { shader_type: ShaderType::Vertex, code: Vec::new(), shader_module: None }
+  }
+}
+
+struct ShaderAssetTabViewer;
+
+impl AssetTabViewer for ShaderAssetTabViewer {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) {
+    if let Some(shader) = asset.as_any().downcast_ref::<ShaderAsset>() {
+      ui.label(format!("Type: {}", shader.shader_type.to_string()));
+
+      let module = shader.shader_module.as_ref().expect("Null shader module!");
+      ui.label(format!("Source file: {}", module.get_source_file()));
+      ui.label(format!("Source language: {:?}", module.get_source_language()));
+      ui.label(format!("Source language version: {}", module.get_source_language_version()));
+      ui.collapsing("Input Variables", |ui| {
+        if let Ok(input_vars) = module.enumerate_input_variables(None) {
+          input_vars.iter().for_each(|v| {
+            ui.label(format!("{}: location {}", v.name, v.location));
+          });
+        }
+      });
+      ui.collapsing("Output Variables", |ui| {
+        if let Ok(output_vars) = module.enumerate_output_variables(None) {
+          output_vars.iter().for_each(|v| {
+            ui.label(format!("{}: location {}", v.name, v.location));
+          });
+        }
+      });
+      ui.collapsing("Descriptor Sets", |ui| {
+        if let Ok(descriptor_sets) = module.enumerate_descriptor_sets(None) {
+          descriptor_sets.iter().for_each(|d| {
+            ui.label(format!("{}", d.set));
+          });
+        }
+      });
+    } else {
+      log::error!("ShaderAssetTabViewer was used for an asset that wasn't a shader!");
+    }
   }
 }
 
@@ -337,19 +365,8 @@ impl Asset for SceneAsset {
     self
   }
 
-  fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
-    egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
-      if ui.button("New Ent").clicked() {
-        self.world.spawn(());
-      }
-      for ent in self.world.iter() {
-        let mut name = "Unnamed".to_string();
-        if ent.has::<crate::engine::NameComp>() {
-          name = ent.get::<&crate::engine::NameComp>().unwrap().name.clone();
-        }
-        ui.label(format!("{}: {}", ent.entity().id(), name));
-      }
-    });
+  fn create_tab_viewer(&self) -> Box<dyn AssetTabViewer> {
+    Box::new(SceneAssetTabViewer::new())
   }
 
   fn post_load(&mut self) {
@@ -371,6 +388,82 @@ impl Default for SceneAsset {
     Self {
       name: "".to_string(),
       world: hecs::World::new()
+    }
+  }
+}
+
+struct SceneAssetTabViewer {
+  selected_ent: Option<hecs::Entity>
+}
+
+impl SceneAssetTabViewer {
+  fn new() -> Self {
+    Self { 
+      selected_ent: None 
+    }
+  }
+}
+
+impl AssetTabViewer for SceneAssetTabViewer {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) {
+    if let Some(scene) = asset.as_any_mut().downcast_mut::<SceneAsset>() {
+      egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
+        if ui.button("New Ent").clicked() {
+          scene.world.spawn(());
+        }
+        let mut ents = scene.world.iter().collect::<Vec<hecs::EntityRef>>();
+        ents.sort_by(|a, b| {
+          if a.entity().id() < b.entity().id() {
+            std::cmp::Ordering::Less
+          } else if a.entity().id() > b.entity().id() {
+            std::cmp::Ordering::Greater
+          } else {
+            std::cmp::Ordering::Equal
+          }
+        });
+
+        for ent in ents {
+          let mut name = "Unnamed".to_string();
+          if ent.has::<crate::engine::NameComp>() {
+            name = ent.get::<&crate::engine::NameComp>().unwrap().name.clone();
+          }
+          let is_selected = self.selected_ent.is_some() && self.selected_ent.unwrap() == ent.entity();
+          if ui.selectable_label(is_selected, format!("{}: {}", ent.entity().id(), name)).clicked() {
+            self.selected_ent = Some(ent.entity())
+          }
+        }
+
+        ui.separator();
+
+        if let Some(selected_ent) = self.selected_ent {
+          let mut remove_name = false;
+          let mut add_name = false;
+          if let Ok(ent) = scene.world.entity(selected_ent) {
+            if ent.has::<crate::engine::NameComp>() {
+              if let Some(mut name_comp) = ent.get::<&mut crate::engine::NameComp>() {
+                ui.horizontal(|ui| {
+                  ui.text_edit_singleline(&mut name_comp.name);
+                  if ui.button("-").clicked() {
+                    remove_name = true;
+                  }
+                });
+              }
+            } else {
+              if ui.button("+").clicked() {
+                add_name = true;
+              }
+            }
+          }
+
+          if add_name {
+            scene.world.insert_one(selected_ent, crate::engine::NameComp { name: "".to_string() }).expect("Failed to add name!");
+          }
+
+          if remove_name {
+            scene.world.remove_one::<crate::engine::NameComp>(selected_ent).expect("Failed to remove name!");
+          }
+        }
+      });
     }
   }
 }
