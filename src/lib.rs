@@ -1,3 +1,5 @@
+//#![feature(trait_upcasting)]
+
 //! A humble little game engine.
 
 /// Core engine features.
@@ -22,6 +24,7 @@ pub use egui;
 pub use log;
 pub use wgpu;
 pub use egui_wgpu_backend;
+pub use egui_extras;
 
 /// A standard Error type used by various engine systems.
 #[derive(Debug, Clone)]

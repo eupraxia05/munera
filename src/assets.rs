@@ -2,6 +2,7 @@ use std::any::Any;
 use std::mem::size_of;
 use std::{collections::HashMap, fs};
 use egui_extras::RetainedImage;
+use serde::ser::SerializeMap;
 use serde_binary::{Decode, Deserializer};
 use serde_binary::binary_stream::Endian;
 use spirv_reflect::ShaderModule;
@@ -10,11 +11,15 @@ use crate::math;
 use crate::Result;
 use crate::Error;
 
-pub trait Asset : serde_binary::Encode + serde_binary::Decode {
+pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any {
+  fn as_any(&self) -> &dyn Any;
+  fn as_any_mut(&mut self) -> &mut dyn Any;
+  fn as_asset(&self) -> &dyn Asset;
   fn size_bytes(&self) -> usize;
   fn build_dockable_content(&mut self, ui: &mut egui::Ui);
   fn set_name(&mut self, name: &String);
   fn post_load(&mut self);
+  fn get_asset_type_name(&self) -> &str;
 }
 
 pub struct ImageAsset {
@@ -33,9 +38,29 @@ impl ImageAsset {
       name: "".to_string()
     }
   }
+
+  pub fn retained_image(&self) -> &Option<RetainedImage> {
+    &self.retained_image
+  }
 }
 
 impl Asset for ImageAsset {
+  fn get_asset_type_name(&self) -> &str {
+    "Image"
+  }
+  
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+
+  fn as_any_mut(&mut self) -> &mut dyn Any {
+    self
+  }
+
+  fn as_asset(&self) -> &dyn Asset {
+    self
+  }
+
   fn size_bytes(&self) -> usize {
     self.data.len() * size_of::<u8>() + size_of::<math::Vec2u>()
   }
@@ -54,8 +79,8 @@ impl Asset for ImageAsset {
           (disp_h as f32 * aspect) as u32);
         let disp_h = std::cmp::min(ui.available_height() as u32, 
           (disp_w as f32 / aspect) as u32);
-        ui.image(self.retained_image.as_ref().unwrap()
-          .texture_id(ui.ctx()), egui::Vec2::new(disp_w as f32, disp_h as f32));
+        ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.retained_image.as_ref().unwrap()
+          .texture_id(ui.ctx()), egui::Vec2::new(disp_w as f32, disp_h as f32))));
       });
     });
   }
@@ -119,6 +144,22 @@ impl ShaderAsset {
 }
 
 impl Asset for ShaderAsset {
+  fn get_asset_type_name(&self) -> &str {
+    "Shader"
+  }
+
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+
+  fn as_any_mut(&mut self) -> &mut dyn Any {
+    self
+  }
+
+  fn as_asset(&self) -> &dyn Asset {
+    self
+  }
+
   fn size_bytes(&self) -> usize {
     size_of::<Self>() + self.code.len() * size_of::<u8>()
   }
@@ -243,17 +284,72 @@ impl serde::Serialize for SceneAsset {
   }
 }
 
+pub struct HecsEntDeserializeContext;
+
+impl HecsEntDeserializeContext {
+  fn new() -> Self {
+    Self { }
+  }
+}
+
+impl hecs::serialize::row::DeserializeContext for HecsEntDeserializeContext {
+  fn deserialize_entity<'de, M>(&mut self, mut map: M, entity: &mut hecs::EntityBuilder,) 
+    -> std::result::Result<(), M::Error>
+    where M: serde::de::MapAccess<'de> 
+  {
+    while let Some((key, value)) = map.next_entry()? {
+      match key {
+        "name" => {
+          entity.add::<crate::engine::NameComp>(crate::engine::NameComp { name: value });
+        },
+        &_ => { }
+      }
+    }
+
+    Ok(())
+  }
+}
+
 impl<'de> serde::Deserialize<'de> for SceneAsset {
   fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where D: serde::Deserializer<'de> 
   {
-    Err(serde::de::Error::custom("Not implemented yet.")) 
+    let mut ass = SceneAsset::default();
+    ass.world = hecs::serialize::row::deserialize(&mut HecsEntDeserializeContext { }, deserializer)?;
+    Ok(ass)
   }
 }
 
 impl Asset for SceneAsset {
+  fn get_asset_type_name(&self) -> &str {
+    "Scene"
+  }
+
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+
+  fn as_any_mut(&mut self) -> &mut dyn Any {
+    self
+  }
+
+  fn as_asset(&self) -> &dyn Asset {
+    self
+  }
+
   fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
-    ui.label("Scene!");
+    egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
+      if ui.button("New Ent").clicked() {
+        self.world.spawn(());
+      }
+      for ent in self.world.iter() {
+        let mut name = "Unnamed".to_string();
+        if ent.has::<crate::engine::NameComp>() {
+          name = ent.get::<&crate::engine::NameComp>().unwrap().name.clone();
+        }
+        ui.label(format!("{}: {}", ent.entity().id(), name));
+      }
+    });
   }
 
   fn post_load(&mut self) {
@@ -294,18 +390,36 @@ impl AssetCache {
     if !self.assets.contains_key(name) {
       log::info!("Loading {}", name);
       if let Ok(read) = fs::read(name) {
-        match serde_binary::decode::<AssetDeserializeHelper>(&read, Endian::Little) {
-          Ok(decode) => {
-            let mut ass = decode.asset.unwrap();
-            ass.set_name(name);
-            ass.post_load();
-            self.assets.insert(name.clone(), ass);
-            return Ok(());
-          },
-          Err(err) => {
-            return Err(Error::new(&format!("Failed to decode {}: {}", name, err)));
+        if read[0] == b'b' {
+          match serde_binary::decode::<AssetDeserializeHelper>(&read[1..], Endian::Little) {
+            Ok(decode) => {
+              let mut ass = decode.asset.unwrap();
+              ass.set_name(name);
+              ass.post_load();
+              self.assets.insert(name.clone(), ass);
+              return Ok(());
+            },
+            Err(err) => {
+              return Err(Error::new(&format!("Failed to decode {}: {}", name, err)));
+            }
           }
+        } else if read[0] == b't' {
+          match serde_json::from_slice::<AssetDeserializeHelper>(&read[1..]) {
+            Ok(deserialize) => {
+              let mut ass = deserialize.asset.unwrap();
+              ass.set_name(name);
+              ass.post_load();
+              self.assets.insert(name.clone(), ass);
+              return Ok(());
+            },
+            Err(err) => {
+              return Err(Error::new(&format!("Failed to deserialize {}: {}", name, err)));
+            }
+          }
+        } else {
+          return Err(Error::new(&format!("Failed to read binary/text descriminator from {}", name)));
         }
+        
       } else {
         return Err(Error::new(&format!("Failed to open {}", name)));
       }
@@ -313,15 +427,27 @@ impl AssetCache {
     Ok(())
   }
 
-  pub fn borrow_asset(&self, name: &String) -> Option<&dyn Asset> {
+  pub fn borrow_asset<AssetType>(&self, name: &String) -> Option<&AssetType>
+    where AssetType: Asset 
+  {
     if let Some(ass) = self.assets.get(name) {
-      Some(ass.as_ref())
+      Some((ass.as_any()).downcast_ref::<AssetType>().unwrap())
     } else {
       None
     }
   }
 
-  pub fn borrow_asset_mut(&mut self, name: &String) -> Option<&mut dyn Asset> {
+  pub fn borrow_asset_mut<AssetType>(&mut self, name: &String) -> Option<&mut AssetType>
+    where AssetType: Asset
+  {
+    if let Some(ass) = self.assets.get_mut(name) {
+      Some((ass.as_any_mut()).downcast_mut::<AssetType>().unwrap())
+    } else {
+      None
+    }
+  }
+
+  pub fn borrow_asset_generic_mut(&mut self, name: &String) -> Option<&mut dyn Asset> {
     if let Some(ass) = self.assets.get_mut(name) {
       Some(ass.as_mut())
     } else {
@@ -359,8 +485,91 @@ impl Decode for AssetDeserializeHelper {
   }
 }
 
+struct AssetDeserializeHelperVisitor;
+
+impl<'de> serde::de::Visitor<'de> for AssetDeserializeHelperVisitor {
+  type Value = AssetDeserializeHelper;
+
+  fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    formatter.write_str("a valid asset");
+    Ok(())
+  }
+
+  fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+    where A: serde::de::MapAccess<'de>
+  {
+    let mut asset_type = None;
+    let mut asset_value = None;
+
+    while let Some((key, value)) = map.next_entry::<&str, serde_json::Value>()? {
+      match key {
+        "type" => {
+          asset_type = Some(String::from(value.as_str().unwrap()));
+        },
+        "asset" => {
+          asset_value = Some(value);
+        },
+        &_ => { }
+      }
+    }
+
+    if asset_type.is_none() {
+      return Err(serde::de::Error::missing_field("type"));
+    }
+
+    let ass: Box<dyn Asset> = match asset_type.as_ref().unwrap().as_str() {
+      "Scene" => {
+        Box::new(match serde_json::from_value::<SceneAsset>(asset_value.unwrap()) {
+          Ok(ass) => ass,
+          Err(err) => return Err(serde::de::Error::custom(err.to_string()))
+        })
+      }
+      _ => {
+        return Err(serde::de::Error::invalid_value(serde::de::Unexpected::Str(asset_type.unwrap().as_str()), &"a valid asset type"));
+      }
+    };
+
+    let mut helper = AssetDeserializeHelper::default();
+    helper.asset = Some(ass);
+
+    Ok(helper)
+  }
+}
+
+impl<'de> serde::de::Deserialize<'de> for AssetDeserializeHelper {
+  fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where D: serde::de::Deserializer<'de> 
+  {
+    let ass = deserializer.deserialize_map(AssetDeserializeHelperVisitor { })?;
+    Ok(ass) 
+  }
+}
+
 impl Default for AssetDeserializeHelper {
   fn default() -> Self {
     Self { asset: None }
+  }
+}
+
+pub struct AssetSerializeHelper<'a, AssetType> {
+  asset: &'a AssetType
+}
+
+impl<'a, AssetType> AssetSerializeHelper<'a, AssetType> {
+  pub fn new(asset: &'a AssetType) -> Self {
+    Self { asset }
+  }
+}
+
+impl<'a, AssetType> serde::Serialize for AssetSerializeHelper<'a, AssetType>
+  where AssetType: Asset + serde::Serialize
+{
+  fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where S: serde::Serializer 
+  {
+    let mut map = serializer.serialize_map(None)?;
+    map.serialize_entry("type", self.asset.get_asset_type_name());
+    map.serialize_entry("asset", self.asset);
+    map.end()
   }
 }

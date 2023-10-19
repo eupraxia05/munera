@@ -91,7 +91,7 @@ impl Editor {
 
   fn build_title_menu(&self, ui: &mut Ui) {
     egui::menu::bar(ui, |ui| {
-      ui.image(self.title_img.texture_id(ui.ctx()), Vec2::new(24.0, 24.0));
+      ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.title_img.texture_id(ui.ctx()), Vec2::new(24.0, 24.0))));
       ui.menu_button("File", |ui| {
         let _ = ui.button("Save All");
       });
@@ -110,7 +110,7 @@ impl Editor {
   fn build_toolbar(&mut self, ui: &mut Ui) {
     ui.vertical_centered(|ui| {
       for (idx, tool) in self.tools.iter().enumerate() {
-        let button = egui::ImageButton::new(tool.button_img().texture_id(ui.ctx()), Vec2::new(32.0, 32.0));
+        let button = egui::ImageButton::new(egui::ImageSource::Texture(egui::load::SizedTexture::new(tool.button_img().texture_id(ui.ctx()), Vec2::new(32.0, 32.0))));
         if ui.add(button).clicked() {
           self.selected_tool_idx = Some(idx);
         }
@@ -232,7 +232,7 @@ impl AssetBrowserTool {
       import_path: String::from(""),
       target_path: String::from(""),
       import_handlers: vec![Box::new(ImageImportHandler::new()), 
-        Box::new(MeshImportHandler::new()), Box::new(ShaderImportHandler::new())],
+        Box::new(ShaderImportHandler::new())],
       selected_asset: None,
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_browser_tool_button", 
         include_bytes!("../ass/asset_browser.png")).expect("Failed to load image!"),
@@ -260,7 +260,7 @@ impl Tool for AssetBrowserTool {
 
       if ui.button("Scene").clicked() {
         let scene = crate::assets::SceneAsset::default();
-        let ser = serde_json::to_string_pretty(&scene).expect("Couldn't serialize default scene!");
+        let ser = "t".to_string() + &serde_json::to_string_pretty(&assets::AssetSerializeHelper::new(&scene)).expect("Couldn't serialize default scene!");
         std::fs::write(format!("ass/{}.ass", self.new_asset_name), ser).expect("Couldn't write to file!");
       }
     });
@@ -449,7 +449,7 @@ impl Dockable for AssetEditorDockable {
 
   fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
     let mut ass_cache = asset_cache.borrow_mut();
-    let ass = ass_cache.borrow_asset_mut(&self.ass_name);
+    let ass = ass_cache.borrow_asset_generic_mut(&self.ass_name);
     if ass.is_some() {
       ass.unwrap().build_dockable_content(ui);
     }
@@ -510,7 +510,7 @@ impl<GameAppType> PlayDockable<GameAppType>
       } else {
         return;
       }
-    } 
+    }
 
     let image = device.create_texture(&tex_desc);
     log::info!("Creating play texture {} x {}", self.requested_size.x, self.requested_size.y);
@@ -566,7 +566,7 @@ impl<GameAppType> Dockable for PlayDockable<GameAppType>
     self.requested_size = math::Vec2u::new(size.x as u32, size.y as u32);
     
     if self.tex_id.is_some() {
-      ui.image(self.tex_id.unwrap(), Vec2::new(self.curr_size.x as f32, self.curr_size.y as f32));
+      ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.tex_id.unwrap(), Vec2::new(self.curr_size.x as f32, self.curr_size.y as f32))));
 
     }
   }
@@ -621,7 +621,9 @@ impl ImportHandler for ImageImportHandler {
         let file = File::create(target_path);
         if file.is_ok() {
           if enc.is_ok() {
-            let write_result = file.unwrap().write_all(&enc.unwrap());
+            let mut buf_to_write = vec![b'b'];
+            buf_to_write.append(&mut enc.unwrap().clone());
+            let write_result = file.unwrap().write_all(&buf_to_write);
             if write_result.is_err() {
               log::error!("Failed to write {}: {}", target_path, write_result.err().unwrap())
             }
@@ -639,28 +641,6 @@ impl ImportHandler for ImageImportHandler {
       log::error!("Failed to open {}", import_path);
     }
   } 
-}
-
-struct MeshImportHandler;
-
-impl MeshImportHandler {
-  fn new() -> Self {
-    Self { }
-  }
-}
-
-impl ImportHandler for MeshImportHandler {
-  fn name(&self) -> &'static str {
-    "Mesh"
-  }
-
-  fn extensions(&self) -> &[&'static str] {
-    &[".gltf", ".fbx", ".obj"]
-  }
-
-  fn import(&self, _import_path: &String, _target_path: &String) {
-
-  }
 }
 
 struct ShaderImportHandler;
@@ -716,8 +696,10 @@ impl ImportHandler for ShaderImportHandler {
                 Err(err) => {
                   log::error!("Failed to encode shader: {}", err);
                 },
-                Ok(bin) => {
-                  match fs::write(target_path, bin) {
+                Ok(mut bin) => {
+                  let mut final_out = vec![b'b'];
+                  final_out.append(&mut bin);
+                  match fs::write(target_path, final_out) {
                     Err(err) => {
                       log::error!("Failed to write to {}: {}", target_path, err.to_string());
                     }
