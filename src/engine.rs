@@ -62,7 +62,10 @@ impl Engine {
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::WindowBuilder::new().with_title("Munera").with_maximized(true).build(&event_loop).unwrap();
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+      backends: wgpu::Backends::VULKAN,
+      dx12_shader_compiler: wgpu::Dx12Compiler::Fxc
+    });
     let surface = unsafe { instance.create_surface(&window).unwrap() };
 
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

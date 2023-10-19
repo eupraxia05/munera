@@ -66,10 +66,10 @@ impl Asset for ImageAsset {
   }
 
   fn build_dockable_content(&mut self, ui: &mut egui::Ui) {
-    egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show(ui.ctx(), |ui| {
+    egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
       ui.label(format!("Resolution: {} x {}", self.size.x, self.size.y));
     });
-    egui::CentralPanel::default().show(ui.ctx(), |ui| {
+    egui::CentralPanel::default().show_inside(ui, |ui| {
       ui.centered_and_justified(|ui| {
         let w = self.size.x;
         let h = self.size.y;

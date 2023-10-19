@@ -15,33 +15,54 @@ use crate::{assets, Result, math};
 const TOOLBAR_WIDTH: f32 = 32.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
-pub struct Dock {
-  dockables: Vec<Box<dyn Dockable>>,
-  focused_dockable: usize
+struct DockTabViewer<'a> {
+  asset_cache: &'a RefCell<assets::AssetCache>
 }
 
-impl Dock {
-  pub fn new() -> Self {
-    Self {
-      dockables: Vec::new(),
-      focused_dockable: 0
+impl<'a> DockTabViewer<'a> {
+  fn new(asset_cache: &'a RefCell<assets::AssetCache>) -> Self {
+    Self { asset_cache }
+  }
+}
+
+impl<'a> egui_dock::TabViewer for DockTabViewer<'a> {
+  type Tab = DockTab;
+
+  fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+    match tab {
+      DockTab::Asset(asset_name) => asset_name.as_str().into(),
     }
   }
+  
+  fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+    match tab {
+      DockTab::Asset(asset_name) => {
+        let mut cache = self.asset_cache.borrow_mut();
+        cache.load_file(asset_name);
+        let ass = cache.borrow_asset_generic_mut(asset_name);
+        ass.unwrap().build_dockable_content(ui);
+      }
+    }
+  }
+}
+
+pub enum DockTab {
+  Asset(String),
 }
 
 pub struct Editor {
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
-  dock: Dock,
   console_command_input_text: String,
-  title_img: egui_extras::RetainedImage
+  title_img: egui_extras::RetainedImage,
+  dock: egui_dock::DockState<DockTab>
 }
 
 impl crate::engine::App for Editor {
   fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
-    for dockable in &mut self.dock.dockables {
+    /*for dockable in &mut self.dock.tab {
       dockable.tick(dt, device, asset_cache, egui_rpass, queue);
-    }
+    }*/
   }
 
   fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {
@@ -82,7 +103,7 @@ impl Editor {
         Box::new(AssetCacheTool::new())
       ],
       selected_tool_idx: None,
-      dock: Dock::new(),
+      dock: egui_dock::DockState::new(Vec::new()),
       console_command_input_text: String::default(),
       title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../ass/munera.png"))
         .expect("Failed to load title image!"),
@@ -124,7 +145,7 @@ impl Editor {
         let tool = &mut self.tools[self.selected_tool_idx.unwrap()];
         ui.label(tool.name());
         ui.separator();
-        tool.build_tool_properties(asset_cache, &mut self.dock, ui, device);
+        tool.build_tool_properties(asset_cache, ui, device, &mut self.dock);
       } else {
         ui.label("Tool Properties");
         ui.separator();
@@ -185,7 +206,13 @@ impl Editor {
   }
 
   fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext) {
-    TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
+    egui::CentralPanel::default().show(ctx, |ui| {
+      let mut viewer = DockTabViewer::new(asset_cache);
+      egui_dock::DockArea::new(&mut self.dock).style(egui_dock::Style::from_egui(ctx.style().as_ref()))
+        .show_inside(ui, &mut viewer);
+    });
+    
+    /*TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
       ui.horizontal(|ui| {
         let mut close_idx = None;
         for (idx, dockable) in self.dock.dockables.iter().enumerate() {
@@ -207,14 +234,14 @@ impl Editor {
       if self.dock.dockables.len() > self.dock.focused_dockable {
         self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui);
       }
-    });
+    });*/
   }
 }
 
 trait Tool {
   fn name(&self) -> &'static str;
   fn button_img(&self) -> &egui_extras::RetainedImage;
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device);
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui, device: &wgpu::Device, dock: &mut egui_dock::DockState<DockTab>);
 }
 
 struct AssetBrowserTool {
@@ -250,7 +277,7 @@ impl Tool for AssetBrowserTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) {
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui, device: &wgpu::Device, dock: &mut egui_dock::DockState<DockTab>) {
     ui.collapsing("New", |ui| {
       ui.horizontal(|ui| {
         ui.label("Name");
@@ -323,16 +350,8 @@ impl Tool for AssetBrowserTool {
       let name = p.to_str().unwrap();
       let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
       if ui.selectable_label(is_selected, name).clicked() {
-        match AssetEditorDockable::new(asset_cache,
-          &(String::from("./ass/") + &String::from(name))) 
-        {
-          Err(e) => {
-            log::error!("Failed to open {}: {}", name, e);
-          },
-          Ok(dockable) => {
-            dock.dockables.push(Box::new(dockable));
-          }
-        }
+        let file_path = String::from("./ass/") + &String::from(name);
+        dock.push_to_focused_leaf(DockTab::Asset(file_path));
       }
     }
   }
@@ -356,9 +375,9 @@ impl<GameAppType> Tool for PlayTool<GameAppType>
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, _asset_cache: &RefCell<assets::AssetCache>, dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) {
+  fn build_tool_properties(&mut self, _asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui, device: &wgpu::Device, dock: &mut egui_dock::DockState<DockTab>) {
     if ui.button("Play!").clicked() {
-      dock.dockables.push(Box::new(PlayDockable::<GameAppType>::new(device)));
+      //dock.dockables.push(Box::new(PlayDockable::<GameAppType>::new(device)));
     }
   }
 }
@@ -409,8 +428,7 @@ impl Tool for AssetCacheTool {
     &self.button_img
   }
 
-  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, 
-    _dock: &mut Dock, ui: &mut Ui, device: &wgpu::Device) 
+  fn build_tool_properties(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui, device: &wgpu::Device, dock: &mut egui_dock::DockState<DockTab>) 
   {
     let cache = asset_cache.borrow();
     let assets = cache.borrow_all_assets();
@@ -424,7 +442,7 @@ impl Tool for AssetCacheTool {
   }
 }
 
-pub trait Dockable {
+/*pub trait Dockable {
   fn title(&self) -> String;
   fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui);
   fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) { }
@@ -570,7 +588,7 @@ impl<GameAppType> Dockable for PlayDockable<GameAppType>
 
     }
   }
-}
+}*/
 
 trait ImportHandler {
   fn name(&self) -> &'static str;

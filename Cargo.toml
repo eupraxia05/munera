@@ -30,3 +30,4 @@ pollster = "0.3.0"
 egui_winit_platform = { git = "https://github.com/eupraxia05/egui_winit_platform.git", branch = "egui-0.23" }
 egui_demo_lib = "0.23.0"
 egui_wgpu_backend = { git = "https://github.com/eupraxia05/egui_wgpu_backend.git", branch = "egui-0.23" }
+egui_dock = "0.8.1"
