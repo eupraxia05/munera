@@ -37,22 +37,13 @@ impl CompType {
 }
 
 /// A context containing all engine systems, assets, and metadata.
-pub struct Engine {
-  comp_types: Vec<CompType>,
-  asset_cache: RefCell<assets::AssetCache>,
-  event_loop: winit::event_loop::EventLoop<()>,
-  window: winit::window::Window,
-  instance: wgpu::Instance,
-  device: wgpu::Device,
-  queue: wgpu::Queue,
-  surface: wgpu::Surface,
-  surface_config: wgpu::SurfaceConfiguration,
-  egui_winit_plat: egui_winit_platform::Platform,
-  egui_rpass: egui_wgpu_backend::RenderPass
-}
+pub struct Engine;
 
 impl Engine {
-  pub fn new() -> Self {
+  pub fn run<'a, AppType: App<'a> + 'static>() {
+    let comp_types = define_comps!(); 
+    let asset_cache = RefCell::new(assets::AssetCache::new());
+    
     log::set_logger(&crate::logger::LOGGER)
       .map(|()| log::set_max_level(log::LevelFilter::Info))
       .expect("Couldn't set logger!");
@@ -84,7 +75,7 @@ impl Engine {
 
     let size = window.inner_size();
     let surface_format = surface.get_capabilities(&adapter).formats[0];
-    let surface_config = wgpu::SurfaceConfiguration {
+    let mut surface_config = wgpu::SurfaceConfiguration {
       usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
       format: surface_format,
       width: size.width as u32,
@@ -95,7 +86,7 @@ impl Engine {
     };
     surface.configure(&device, &surface_config);
 
-    let egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+    let mut egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
       physical_width: size.width as u32,
       physical_height: size.height as u32,
       scale_factor: window.scale_factor(),
@@ -103,29 +94,16 @@ impl Engine {
       style: Default::default()
     });
 
-    let egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
+    let mut egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
+    
+    let mut app = AppType::default();
 
-    Self { 
-      comp_types: define_comps!(), 
-      asset_cache: RefCell::new(assets::AssetCache::new()),
-      event_loop,
-      window,
-      instance,
-      device,
-      queue,
-      surface,
-      surface_config,
-      egui_winit_plat,
-      egui_rpass
-    }
-  }
-
-  pub fn run<AppType: App + 'static>(mut self, mut app: AppType) {
     let start_time = std::time::Instant::now();
-    self.event_loop.run(move |event, _, control_flow| {
+    event_loop.run(move |event, _, control_flow| {
+
       control_flow.set_poll();
 
-      self.egui_winit_plat.handle_event(&event);
+      egui_winit_plat.handle_event(&event);
 
       match event {
         winit::event::Event::WindowEvent { event, .. } => {
@@ -135,18 +113,18 @@ impl Engine {
             },
             winit::event::WindowEvent::Resized(size) => {
               if size.width > 0 && size.height > 0 {
-                self.surface_config.width = size.width;
-                self.surface_config.height = size.height;
-                self.surface.configure(&self.device, &self.surface_config);
+                surface_config.width = size.width;
+                surface_config.height = size.height;
+                surface.configure(&device, &surface_config);
               }
             }
             _ => ()
           }
         },
         winit::event::Event::MainEventsCleared => {
-          self.egui_winit_plat.update_time(start_time.elapsed().as_secs_f64());
+          egui_winit_plat.update_time(start_time.elapsed().as_secs_f64());
 
-          let output_frame = match self.surface.get_current_texture() {
+          let output_frame = match surface.get_current_texture() {
             Ok(frame) => frame,
             Err(wgpu::SurfaceError::Outdated) => {
               return;
@@ -157,57 +135,70 @@ impl Engine {
             }
           };
 
-          app.tick(0.0, &self.device, &self.asset_cache, &mut self.egui_rpass, &self.queue);
+          //app.tick(0.0, &self.device, &self.asset_cache, &mut self.egui_rpass, &self.queue);
 
           let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-          self.egui_winit_plat.begin_frame();
+          egui_winit_plat.begin_frame();
 
-          app.build_ui(&self.asset_cache, &self.egui_winit_plat.context(), &self.device);
+          app.build_ui(&asset_cache, &egui_winit_plat.context(), &device);
 
-          let full_output = self.egui_winit_plat.end_frame(Some(&self.window));
-          let paint_jobs = self.egui_winit_plat.context().tessellate(full_output.shapes);
+          let full_output = egui_winit_plat.end_frame(Some(&window));
+          let paint_jobs = egui_winit_plat.context().tessellate(full_output.shapes);
 
-          let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+          let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("encoder")
           });
 
           let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-            physical_width: self.window.inner_size().width,
-            physical_height: self.window.inner_size().height,
-            scale_factor: self.window.scale_factor() as f32
+            physical_width: window.inner_size().width,
+            physical_height: window.inner_size().height,
+            scale_factor: window.scale_factor() as f32
           };
 
-          self.egui_rpass.add_textures(&self.device, &self.queue, &full_output.textures_delta)
+          egui_rpass.add_textures(&device, &queue, &full_output.textures_delta)
             .expect("Failed to add textures!");
 
-          self.egui_rpass.update_buffers(&self.device, &self.queue, &paint_jobs, &screen_descriptor);
+          egui_rpass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
 
-          self.egui_rpass.execute(&mut encoder, &output_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK))
+          egui_rpass.execute(&mut encoder, &output_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK))
             .expect("Failed to execute egui rendering!");
 
-          self.queue.submit(std::iter::once(encoder.finish()));
+          queue.submit(std::iter::once(encoder.finish()));
 
           output_frame.present();
 
-          self.egui_rpass.remove_textures(full_output.textures_delta)
+          egui_rpass.remove_textures(full_output.textures_delta)
             .expect("Failed to remove textures!");
         }
         _ => ()
       }
     });
   }
+}
 
-  pub fn get_comp_types(&self) -> &Vec<CompType> {
-    &self.comp_types
+pub struct AppRunner<'a, AppType>
+  where AppType: App<'a> + 'static
+{
+  phantom_data: std::marker::PhantomData<&'a AppType>
+}
+
+impl<'a, AppType> AppRunner<'a, AppType> 
+  where AppType: App<'a>
+{
+  pub fn new() -> Self {
+    Self { 
+      phantom_data: Default::default()
+    }
   }
 
-  pub fn get_asset_cache(&self) -> &RefCell<assets::AssetCache> {
-    &self.asset_cache
+  pub fn run<'b>(&'b mut self) {
+    let mut app = AppType::default();
+    Engine::run::<AppType>();
   }
 }
 
-pub trait App {
+pub trait App<'a>: Default {
   fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue);
   fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device);
 }

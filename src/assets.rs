@@ -23,7 +23,7 @@ pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any {
 }
 
 pub trait AssetTabViewer {
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui);
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool;
 }
 
 pub struct ImageAsset {
@@ -109,7 +109,7 @@ impl serde_binary::Decode for ImageAsset {
 struct ImageAssetTabViewer;
 
 impl AssetTabViewer for ImageAssetTabViewer {
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
     if let Some(img) = asset.as_any().downcast_ref::<ImageAsset>() {
       egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
         ui.label(format!("Resolution: {} x {}", img.size.x, img.size.y));
@@ -131,6 +131,8 @@ impl AssetTabViewer for ImageAssetTabViewer {
     } else {
       log::error!("ImageAssetTabViewer was used for an asset that wasn't an image!");
     }
+
+    false
   }
 }
 
@@ -229,7 +231,7 @@ impl Default for ShaderAsset {
 struct ShaderAssetTabViewer;
 
 impl AssetTabViewer for ShaderAssetTabViewer {
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
     if let Some(shader) = asset.as_any().downcast_ref::<ShaderAsset>() {
       ui.label(format!("Type: {}", shader.shader_type.to_string()));
 
@@ -261,6 +263,8 @@ impl AssetTabViewer for ShaderAssetTabViewer {
     } else {
       log::error!("ShaderAssetTabViewer was used for an asset that wasn't a shader!");
     }
+
+    false
   }
 }
 
@@ -405,11 +409,13 @@ impl SceneAssetTabViewer {
 }
 
 impl AssetTabViewer for SceneAssetTabViewer {
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
+    let mut is_modified = false;
     if let Some(scene) = asset.as_any_mut().downcast_mut::<SceneAsset>() {
       egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
         if ui.button("New Ent").clicked() {
           scene.world.spawn(());
+          is_modified = true;
         }
         let mut ents = scene.world.iter().collect::<Vec<hecs::EntityRef>>();
         ents.sort_by(|a, b| {
@@ -442,7 +448,9 @@ impl AssetTabViewer for SceneAssetTabViewer {
             if ent.has::<crate::engine::NameComp>() {
               if let Some(mut name_comp) = ent.get::<&mut crate::engine::NameComp>() {
                 ui.horizontal(|ui| {
-                  ui.text_edit_singleline(&mut name_comp.name);
+                  if ui.text_edit_singleline(&mut name_comp.name).changed() {
+                    is_modified = true;
+                  }
                   if ui.button("-").clicked() {
                     remove_name = true;
                   }
@@ -457,14 +465,17 @@ impl AssetTabViewer for SceneAssetTabViewer {
 
           if add_name {
             scene.world.insert_one(selected_ent, crate::engine::NameComp { name: "".to_string() }).expect("Failed to add name!");
+            is_modified = true;
           }
 
           if remove_name {
             scene.world.remove_one::<crate::engine::NameComp>(selected_ent).expect("Failed to remove name!");
+            is_modified = true;
           }
         }
       });
     }
+    is_modified
   }
 }
 

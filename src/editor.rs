@@ -16,12 +16,13 @@ const TOOLBAR_WIDTH: f32 = 32.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
 struct DockTabViewer<'a> {
-  asset_cache: &'a RefCell<assets::AssetCache>
+  asset_cache: &'a RefCell<assets::AssetCache>,
+  touched_assets: &'a mut Vec<String>,
 }
 
 impl<'a> DockTabViewer<'a> {
-  fn new(asset_cache: &'a RefCell<assets::AssetCache>) -> Self {
-    Self { asset_cache }
+  fn new(asset_cache: &'a RefCell<assets::AssetCache>, touched_assets: &'a mut Vec<String>) -> Self {
+    Self { asset_cache, touched_assets }
   }
 }
 
@@ -39,7 +40,10 @@ impl<'a> egui_dock::TabViewer for DockTabViewer<'a> {
       DockTab::Asset { name, viewer } => {
         let mut cache = self.asset_cache.borrow_mut();
         if let Some(ass) = cache.borrow_asset_generic_mut(name) {
-          viewer.build_dockable_content(ass, ui)
+          let modified = viewer.build_dockable_content(ass, ui);
+          if modified {
+            self.touched_assets.push(name.clone());
+          }
         }
       }
     }
@@ -60,15 +64,21 @@ impl DockTab {
   }
 }
 
-pub struct Editor {
+pub struct Editor<'a, GameAppType>
+  where GameAppType: for<'b> crate::engine::App<'b>
+{
+  phantom_data: std::marker::PhantomData<&'a GameAppType>,
   tools: Vec<Box<dyn Tool>>,
   selected_tool_idx: Option<usize>,
   console_command_input_text: String,
   title_img: egui_extras::RetainedImage,
-  dock: egui_dock::DockState<DockTab>
+  dock: egui_dock::DockState<DockTab>,
+  touched_assets: Vec<String>,
 }
 
-impl crate::engine::App for Editor {
+impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
+  where GameAppType: for<'b> crate::engine::App<'b> + 'static + Default
+{
   fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
     /*for dockable in &mut self.dock.tab {
       dockable.tick(dt, device, asset_cache, egui_rpass, queue);
@@ -77,7 +87,7 @@ impl crate::engine::App for Editor {
 
   fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {
     TopBottomPanel::top("title_menu").show(egui_context, |ui| {
-      self.build_title_menu(ui);
+      self.build_title_menu(ui, asset_cache);
     });
     SidePanel::left("toolbar")
       .exact_width(TOOLBAR_WIDTH)
@@ -102,11 +112,21 @@ impl crate::engine::App for Editor {
   }
 }
 
-impl Editor {
-  pub fn new<GameAppType>() -> Self
-    where GameAppType: crate::engine::App + 'static + Default
+impl<'a, GameAppType> Default for Editor<'a, GameAppType> 
+  where GameAppType: for<'b> crate::engine::App<'b> + 'static + Default
+{
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl<'a, GameAppType> Editor<'a, GameAppType> 
+  where GameAppType: for<'b> crate::engine::App<'b> + 'static + Default
+{
+  pub fn new() -> Self
   {
     Self {
+      phantom_data: Default::default(),
       tools: vec![
         Box::new(AssetBrowserTool::new()), 
         Box::new(PlayTool::<GameAppType>::new()),
@@ -117,14 +137,22 @@ impl Editor {
       console_command_input_text: String::default(),
       title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../ass/munera.png"))
         .expect("Failed to load title image!"),
+      touched_assets: Vec::new(),
    }
   }
 
-  fn build_title_menu(&self, ui: &mut Ui) {
+  fn build_title_menu(&self, ui: &mut Ui, asset_cache: &RefCell<assets::AssetCache>) {
     egui::menu::bar(ui, |ui| {
       ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.title_img.texture_id(ui.ctx()), Vec2::new(24.0, 24.0))));
       ui.menu_button("File", |ui| {
-        let _ = ui.button("Save All");
+        if ui.button("Save All").clicked() {
+          for asset in &self.touched_assets {
+            let mut cache = asset_cache.borrow_mut();
+            let ass = cache.borrow_asset_generic_mut(asset).unwrap().as_any().downcast_ref::<crate::assets::SceneAsset>();
+            let str = serde_json::to_string_pretty(&ass.unwrap()).unwrap();
+            std::fs::write(asset, str);
+          }
+        }
       });
       ui.menu_button("Project", |ui| {
         let _ = ui.button("Project Settings");
@@ -217,7 +245,7 @@ impl Editor {
 
   fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext) {
     egui::CentralPanel::default().show(ctx, |ui| {
-      let mut viewer = DockTabViewer::new(asset_cache);
+      let mut viewer = DockTabViewer::new(asset_cache, &mut self.touched_assets);
       egui_dock::DockArea::new(&mut self.dock).style(egui_dock::Style::from_egui(ctx.style().as_ref()))
         .show_inside(ui, &mut viewer);
     });
@@ -368,14 +396,14 @@ impl Tool for AssetBrowserTool {
 }
 
 struct PlayTool<GameAppType>
-  where GameAppType : crate::engine::App + Default
+  where GameAppType : for<'a> crate::engine::App<'a> + Default
 {
   button_img: egui_extras::RetainedImage,
   phantom_data: std::marker::PhantomData<GameAppType>
 }
 
 impl<GameAppType> Tool for PlayTool<GameAppType>
-  where GameAppType : crate::engine::App + Default + 'static
+  where GameAppType : for<'a> crate::engine::App<'a> + Default + 'static
 {
   fn name(&self) -> &'static str {
     "Play"
@@ -393,7 +421,7 @@ impl<GameAppType> Tool for PlayTool<GameAppType>
 }
 
 impl<GameAppType> PlayTool<GameAppType>
-  where GameAppType : crate::engine::App + Default
+  where GameAppType : for<'a> crate::engine::App<'a> + Default
 {
   fn new() -> Self {
     Self {
