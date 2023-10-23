@@ -70,7 +70,7 @@ impl Asset for ImageAsset {
   }
 
   fn create_tab_viewer(&self) -> Box<dyn AssetTabViewer> {
-    Box::new(ImageAssetTabViewer { })
+    Box::new(ImageAssetTabViewer::new())
   }
 
   fn set_name(&mut self, name: &String) {
@@ -106,18 +106,27 @@ impl serde_binary::Decode for ImageAsset {
   }
 }
 
-struct ImageAssetTabViewer;
+struct ImageAssetTabViewer {
+  zoom: f32
+}
+
+impl ImageAssetTabViewer {
+  fn new() -> Self {
+    Self { zoom: 1.0 }
+  }
+}
 
 impl AssetTabViewer for ImageAssetTabViewer {
   fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
     if let Some(img) = asset.as_any().downcast_ref::<ImageAsset>() {
       egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
         ui.label(format!("Resolution: {} x {}", img.size.x, img.size.y));
+        ui.add(egui::Slider::new(&mut self.zoom, 0.1..=4.0).text("Zoom"));
       });
       egui::CentralPanel::default().show_inside(ui, |ui| {
         ui.centered_and_justified(|ui| {
-          let w = img.size.x;
-          let h = img.size.y;
+          let w = (img.size.x as f32 * self.zoom) as u32;
+          let h = (img.size.y as f32 * self.zoom) as u32;
           let aspect = w as f32 / h as f32;
           let disp_h = std::cmp::min(ui.available_height() as u32, h);
           let disp_w = std::cmp::min(ui.available_width() as u32, 
@@ -329,8 +338,8 @@ impl hecs::serialize::row::DeserializeContext for HecsEntDeserializeContext {
     -> std::result::Result<(), M::Error>
     where M: serde::de::MapAccess<'de> 
   {
-    while let Some((key, value)) = map.next_entry()? {
-      match key {
+    while let Some((key, value)) = map.next_entry::<String, String>()? {
+      match key.as_str() {
         "name" => {
           entity.add::<crate::engine::NameComp>(crate::engine::NameComp { name: value });
         },
@@ -508,7 +517,8 @@ impl AssetCache {
             }
           }
         } else if read[0] == b't' {
-          match serde_json::from_slice::<AssetDeserializeHelper>(&read[1..]) {
+          let str = read[1..].to_vec();
+          match serde_json::from_slice::<AssetDeserializeHelper>(&str) {
             Ok(deserialize) => {
               let mut ass = deserialize.asset.unwrap();
               ass.set_name(name);

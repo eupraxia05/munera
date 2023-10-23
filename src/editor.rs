@@ -31,7 +31,13 @@ impl<'a> egui_dock::TabViewer for DockTabViewer<'a> {
 
   fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
     match tab {
-      DockTab::Asset { name, viewer } => name.as_str().into(),
+      DockTab::Asset { name, viewer } => {
+        if !self.touched_assets.contains(name) {
+          name.as_str().into()
+        } else {
+          format!("! {}", name).into()
+        }
+      }
     }
   }
   
@@ -55,12 +61,12 @@ pub enum DockTab {
 }
 
 impl DockTab {
-  fn from_asset(name: &String, asset_cache: &std::cell::RefCell<assets::AssetCache>) -> Self {
+  fn from_asset(name: &String, asset_cache: &std::cell::RefCell<assets::AssetCache>) -> Result<Self> {
     let mut cache = asset_cache.borrow_mut();
-    cache.load_file(name);
+    cache.load_file(name)?;
     let ass = cache.borrow_asset_generic_mut(name);
     let viewer = ass.unwrap().create_tab_viewer();
-    Self::Asset { name: name.clone(), viewer }
+    Ok( Self::Asset { name: name.clone(), viewer } )
   }
 }
 
@@ -141,7 +147,7 @@ impl<'a, GameAppType> Editor<'a, GameAppType>
    }
   }
 
-  fn build_title_menu(&self, ui: &mut Ui, asset_cache: &RefCell<assets::AssetCache>) {
+  fn build_title_menu(&mut self, ui: &mut Ui, asset_cache: &RefCell<assets::AssetCache>) {
     egui::menu::bar(ui, |ui| {
       ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.title_img.texture_id(ui.ctx()), Vec2::new(24.0, 24.0))));
       ui.menu_button("File", |ui| {
@@ -149,9 +155,10 @@ impl<'a, GameAppType> Editor<'a, GameAppType>
           for asset in &self.touched_assets {
             let mut cache = asset_cache.borrow_mut();
             let ass = cache.borrow_asset_generic_mut(asset).unwrap().as_any().downcast_ref::<crate::assets::SceneAsset>();
-            let str = serde_json::to_string_pretty(&ass.unwrap()).unwrap();
+            let str = "t".to_string() + &serde_json::to_string_pretty(&assets::AssetSerializeHelper::new(ass.unwrap())).unwrap();
             std::fs::write(asset, str);
           }
+          self.touched_assets.clear();
         }
       });
       ui.menu_button("Project", |ui| {
@@ -389,7 +396,14 @@ impl Tool for AssetBrowserTool {
       let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
       if ui.selectable_label(is_selected, name).clicked() {
         let file_path = String::from("./ass/") + &String::from(name);
-        dock.push_to_focused_leaf(DockTab::from_asset(&file_path, asset_cache));
+        match DockTab::from_asset(&file_path, asset_cache) {
+          Ok(tab) => {
+            dock.push_to_focused_leaf(tab);
+          },
+          Err(err) => {
+            log::error!("Couldn't open asset tab: {}", err)
+          }
+        }
       }
     }
   }
