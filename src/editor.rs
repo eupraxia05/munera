@@ -1,4 +1,3 @@
-//use egui::load::SizedTexture;
 use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, ScrollArea, Vec2, Frame, Color32, RichText, TextureId, Stroke, Margin};
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
@@ -68,6 +67,17 @@ impl DockTab {
     let viewer = ass.unwrap().create_tab_viewer();
     Ok( Self::Asset { name: name.clone(), viewer } )
   }
+
+  fn tick(&mut self, asset_cache: &std::cell::RefCell<assets::AssetCache>, 
+    device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
+    output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
+  {
+    match self {
+      Self::Asset { name, viewer } => {
+        viewer.tick(device, egui_rpass, output_tex_view, queue)
+      }
+    }
+  }
 }
 
 pub struct Editor<'a, GameAppType>
@@ -85,10 +95,15 @@ pub struct Editor<'a, GameAppType>
 impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
   where GameAppType: for<'b> crate::engine::App<'b> + 'static + Default
 {
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
-    /*for dockable in &mut self.dock.tab {
-      dockable.tick(dt, device, asset_cache, egui_rpass, queue);
-    }*/
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, 
+    egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue, 
+    output_tex_view: &wgpu::TextureView) 
+  {
+    for node in self.dock.iter_nodes_mut() {
+      for tab in node.tabs_mut().unwrap() {
+        tab.tick(asset_cache, device, egui_rpass, output_tex_view, queue);
+      }
+    }
   }
 
   fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {

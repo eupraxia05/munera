@@ -135,9 +135,9 @@ impl Engine {
             }
           };
 
-          //app.tick(0.0, &self.device, &self.asset_cache, &mut self.egui_rpass, &self.queue);
-
           let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+          app.tick(0.0, &device, &asset_cache, &mut egui_rpass, &queue, &output_view);
 
           egui_winit_plat.begin_frame();
 
@@ -199,6 +199,7 @@ impl<'a, AppType> AppRunner<'a, AppType>
 }
 
 pub trait App<'a>: Default {
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue);
+  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, 
+    egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue, output_tex_view: &wgpu::TextureView);
   fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device);
 }

@@ -17,6 +17,9 @@ pub mod editor;
 /// Asset system implementation.
 pub mod assets;
 
+// An isometric renderer.
+pub mod iso_renderer;
+
 /// A standard Result type used by various engine systems.
 pub type Result<T> = std::result::Result<T, Error>;
 

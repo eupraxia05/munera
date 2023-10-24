@@ -64,7 +64,6 @@ impl Vec2u {
   }
 }
 
-
 impl PartialEq for Vec2u {
   fn eq(&self, other: &Self) -> bool {
     self.x == other.x && self.y == other.y
@@ -77,6 +76,19 @@ impl PartialEq for Vec2u {
 
 impl Eq for Vec2u {
 
+}
+
+impl Into<egui::Vec2> for Vec2u {
+  fn into(self) -> egui::Vec2 {
+    egui::Vec2::new(self.x as f32, self.y as f32)
+  }
+}
+
+impl From<egui::Vec2> for Vec2u {
+  fn from(value: egui::Vec2) -> Self {
+    Self { x: value.x as u32, y: value.y as u32 }
+    
+  }
 }
 
 pub struct Vec2f {

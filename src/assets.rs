@@ -23,6 +23,8 @@ pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any {
 }
 
 pub trait AssetTabViewer {
+  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
+    output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue);
   fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool;
 }
 
@@ -117,6 +119,12 @@ impl ImageAssetTabViewer {
 }
 
 impl AssetTabViewer for ImageAssetTabViewer {
+  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
+    output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
+  {
+      
+  }
+
   fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
     if let Some(img) = asset.as_any().downcast_ref::<ImageAsset>() {
       egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
@@ -240,6 +248,12 @@ impl Default for ShaderAsset {
 struct ShaderAssetTabViewer;
 
 impl AssetTabViewer for ShaderAssetTabViewer {
+  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
+    output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
+  {
+    
+  }
+
   fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
     if let Some(shader) = asset.as_any().downcast_ref::<ShaderAsset>() {
       ui.label(format!("Type: {}", shader.shader_type.to_string()));
@@ -406,19 +420,102 @@ impl Default for SceneAsset {
 }
 
 struct SceneAssetTabViewer {
-  selected_ent: Option<hecs::Entity>
+  selected_ent: Option<hecs::Entity>,
+  requested_size: crate::math::Vec2u,
+  curr_size: crate::math::Vec2u,
+  scene_render_tex: Option<wgpu::Texture>,
+  scene_render_tex_id: Option<egui::TextureId>,
+  renderer: Option<crate::iso_renderer::IsoRenderer>
 }
 
 impl SceneAssetTabViewer {
   fn new() -> Self {
     Self { 
-      selected_ent: None 
+      selected_ent: None,
+      requested_size: crate::math::Vec2u::new(0, 0),
+      curr_size: crate::math::Vec2u::new(0, 0),
+      scene_render_tex: None,
+      scene_render_tex_id: None,
+      renderer: None,
     }
+  }
+
+  fn update_scene_render_tex(&mut self, device: &wgpu::Device, 
+    egui_rpass: &mut egui_wgpu_backend::RenderPass) 
+  {
+    if self.requested_size.x == 0 || self.requested_size.y == 0 {
+      return;
+    }
+
+    let is_up_to_date = self.scene_render_tex.is_some() && self.requested_size == self.curr_size;
+
+    if !is_up_to_date {
+      if self.scene_render_tex.is_some() {
+        let mut delta = egui::TexturesDelta::default();
+        delta.free.push(self.scene_render_tex_id.unwrap());
+        egui_rpass.remove_textures(delta);
+        self.scene_render_tex.as_mut().unwrap().destroy();
+        self.scene_render_tex = None
+      }
+
+      let tex_desc = wgpu::TextureDescriptor {
+        label: Some("PlayDockable"),
+        size: wgpu::Extent3d { 
+          width: self.requested_size.x,
+          height: self.requested_size.y,
+          depth_or_array_layers: 1
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba16Float,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[wgpu::TextureFormat::Rgba16Float]
+      };
+
+      let tex = device.create_texture(&tex_desc);
+      let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+      self.scene_render_tex_id = Some(egui_rpass.egui_texture_from_wgpu_texture(device, &view, 
+        wgpu::FilterMode::Nearest));
+      self.scene_render_tex = Some(tex);
+      self.curr_size = self.requested_size;
+    }
+  }
+
+  fn update_iso_renderer(&mut self, device: &wgpu::Device) {
+    if self.renderer.is_some() {
+      return;
+    }
+
+    self.renderer = Some(crate::iso_renderer::IsoRenderer::new(device, wgpu::ColorTargetState{
+      format: wgpu::TextureFormat::Rgba16Float,
+      blend: None,
+      write_mask: wgpu::ColorWrites::ALL
+    }))
   }
 }
 
 impl AssetTabViewer for SceneAssetTabViewer {
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
+  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
+    output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
+  {
+    self.update_scene_render_tex(device, egui_rpass);
+    self.update_iso_renderer(device);
+
+    if let Some(tex) = &self.scene_render_tex {
+      if let Some(renderer) = &mut self.renderer {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { 
+          label: Some("SceneAssetTabViewer scene render" )
+        });
+    
+        renderer.render(&mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()));
+    
+        queue.submit(std::iter::once(encoder.finish()));
+      }
+    }
+  }
+
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {    
     let mut is_modified = false;
     if let Some(scene) = asset.as_any_mut().downcast_mut::<SceneAsset>() {
       egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
@@ -481,6 +578,13 @@ impl AssetTabViewer for SceneAssetTabViewer {
             scene.world.remove_one::<crate::engine::NameComp>(selected_ent).expect("Failed to remove name!");
             is_modified = true;
           }
+        }
+      });
+
+      egui::CentralPanel::default().show_inside(ui, |ui| {
+        self.requested_size = ui.available_size().into();
+        if let Some(tex_id) = self.scene_render_tex_id {
+          ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(tex_id, self.curr_size)));
         }
       });
     }
