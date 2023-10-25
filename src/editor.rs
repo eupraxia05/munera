@@ -100,9 +100,12 @@ impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
     output_tex_view: &wgpu::TextureView) 
   {
     for node in self.dock.iter_nodes_mut() {
-      for tab in node.tabs_mut().unwrap() {
-        tab.tick(asset_cache, device, egui_rpass, output_tex_view, queue);
+      if let Some(tabs) = node.tabs_mut() {
+        for tab in tabs {
+          tab.tick(asset_cache, device, egui_rpass, output_tex_view, queue);
+        }
       }
+      
     }
   }
 

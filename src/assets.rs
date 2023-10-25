@@ -508,7 +508,7 @@ impl AssetTabViewer for SceneAssetTabViewer {
           label: Some("SceneAssetTabViewer scene render" )
         });
     
-        renderer.render(&mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()));
+        renderer.render(&mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()), self.curr_size);
     
         queue.submit(std::iter::once(encoder.finish()));
       }

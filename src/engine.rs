@@ -65,10 +65,13 @@ impl Engine {
       force_fallback_adapter: false
     })).unwrap();
 
+    let mut limits = wgpu::Limits::default();
+    limits.max_push_constant_size = 128;
+
     let (device, queue) = pollster::block_on(adapter.request_device(
       &wgpu::DeviceDescriptor {
-        features: wgpu::Features::default(),
-        limits: wgpu::Limits::default(),
+        features: wgpu::Features::default() | wgpu::Features::PUSH_CONSTANTS,
+        limits,
         label: None,
       }, None
     )).unwrap();

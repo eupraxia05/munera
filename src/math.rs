@@ -52,7 +52,8 @@ impl Default for Vec2i {
   }
 }
 
-#[derive(Copy, Clone)]
+#[derive(bytemuck::NoUninit, Copy, Clone)]
+#[repr(C)]
 pub struct Vec2u {
   pub x : u32,
   pub y : u32
@@ -87,7 +88,7 @@ impl Into<egui::Vec2> for Vec2u {
 impl From<egui::Vec2> for Vec2u {
   fn from(value: egui::Vec2) -> Self {
     Self { x: value.x as u32, y: value.y as u32 }
-    
+
   }
 }
 
@@ -102,6 +103,8 @@ impl Vec2f {
   }
 }
 
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
 pub struct Vec3f {
   pub x: f32,
   pub y: f32,
@@ -111,5 +114,20 @@ pub struct Vec3f {
 impl Vec3f {
   pub fn new(x: f32, y: f32, z: f32) -> Self {
     Self{x: x, y: y, z: z}
+  }
+}
+
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
+pub struct Color {
+  pub r: f32,
+  pub g: f32,
+  pub b: f32,
+  pub a: f32
+}
+
+impl Color {
+  pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+    Self {r, g, b, a}
   }
 }
