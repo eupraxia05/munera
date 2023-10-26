@@ -128,7 +128,7 @@ struct InstanceData {
   color: crate::math::Color
 }
 
-#[derive(Default, mac::Comp, RTTI)]
+#[derive(Default, serde::Serialize, serde::Deserialize, mac::Comp, RTTI, Clone)]
 struct SceneComp {
   background_color: crate::math::Color
 }

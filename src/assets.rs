@@ -311,23 +311,28 @@ impl serde_binary::Encode for SceneAsset {
   }
 }
 
-pub struct HecsEntSerializeContext;
+pub struct HecsEntSerializeContext<'a> {
+  world: &'a hecs::World
+}
 
-impl HecsEntSerializeContext {
-  fn new() -> Self {
-    Self { }
+impl<'a> HecsEntSerializeContext<'a> {
+  fn new(world: &'a hecs::World) -> Self {
+    Self { world }
   }
 }
 
-impl hecs::serialize::row::SerializeContext for HecsEntSerializeContext {
+impl<'a> hecs::serialize::row::SerializeContext for HecsEntSerializeContext<'a> {
   fn serialize_entity<S>(&mut self, entity: hecs::EntityRef<'_>, mut map: S) -> std::result::Result<S::Ok, S::Error>
     where S: serde::ser::SerializeMap 
   {
-    if entity.has::<crate::engine::NameComp>() {
-      if let Some(name) = entity.get::<&crate::engine::NameComp>() {
-        map.serialize_entry("name", &name.name)?;
+    let mut comps = Vec::new();
+    for comp_type in inventory::iter::<crate::engine::CompType>() {
+      if (comp_type.ent_has)(entity) {
+        comps.push((comp_type.ent_get)(self.world, entity.entity()));
       }
     }
+
+    map.serialize_entry("comps", &comps)?;
 
     map.end()
   }
@@ -337,7 +342,7 @@ impl serde::Serialize for SceneAsset {
   fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where S: serde::Serializer 
   {
-    let mut ctx = HecsEntSerializeContext::new();
+    let mut ctx = HecsEntSerializeContext::new(&self.world);
     hecs::serialize::row::serialize(&self.world, &mut ctx, serializer)
   }
 }
@@ -355,12 +360,15 @@ impl hecs::serialize::row::DeserializeContext for HecsEntDeserializeContext {
     -> std::result::Result<(), M::Error>
     where M: serde::de::MapAccess<'de> 
   {
-    while let Some((key, value)) = map.next_entry::<String, String>()? {
-      match key.as_str() {
-        "name" => {
-          entity.add::<crate::engine::NameComp>(crate::engine::NameComp { name: value });
-        },
-        &_ => { }
+    while let Some((key, value)) = map.next_entry::<String, Vec<Box<dyn crate::engine::Comp>>>()? {
+      if key == "comps" {
+        for comp in value {
+          for comp_type in inventory::iter::<crate::engine::CompType>() {
+            if key == comp_type.name {
+              (comp_type.ent_deserialize)(entity, &comp);
+            }
+          }
+        } 
       }
     }
 
@@ -583,13 +591,26 @@ impl AssetTabViewer for SceneAssetTabViewer {
             is_modified = true;
           }
 
+          {
+            let ent = scene.world.entity(selected_ent).unwrap();
+            for comp_typeid in ent.component_types() {
+              for comp_type in inventory::iter::<crate::engine::CompType> {
+                if comp_type.type_id == comp_typeid && comp_type.name != String::from("NameComp") {
+                  ui.label(comp_type.name.clone());
+                  break;
+                }
+              }
+            }
+          }
+
           let mut selected_comp = None;
 
           egui::ComboBox::new("add_component", "").selected_text("Add Comp").show_ui(ui, |ui| {
             for comp_type in inventory::iter::<crate::engine::CompType> {
               if comp_type.name != String::from("NameComp") {
                 if ui.selectable_value(&mut selected_comp, Some(comp_type), comp_type.name.clone()).clicked() {
-                  log::info!("Adding {}", comp_type.name)
+                  is_modified = true;
+                  (comp_type.ent_add)(&mut scene.world, selected_ent);
                 }
               }
             }

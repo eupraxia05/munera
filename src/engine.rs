@@ -3,23 +3,23 @@ use hecs::{EntityRef, Entity, World};
 use serde::{Serialize, Deserialize, ser::SerializeMap};
 use mac::{Comp, define_comps};
 use std::cell::RefCell;
+use std::ops::Deref;
 
 use crate::assets;
 
 // A base trait to generate metadata for a component type.
-pub trait Comp {
-  fn ent_has(ent: EntityRef) -> bool;
-  fn ent_add(world: &mut World, ent: Entity);
-  fn ent_rem(world: &mut World, ent: Entity);
+#[typetag::serde(tag = "type")]
+pub trait Comp: erased_serde::Serialize + std::marker::Sync + std::marker::Send {
+  fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Utility component to tag entities with a human-friendly name.
-#[derive(Comp, Serialize, Deserialize, Default)]
+#[derive(Comp, Serialize, Deserialize, Default, Clone)]
 pub struct NameComp {
   pub name: String
 }
 
-#[derive(Comp, Default)]
+#[derive(Comp, Default, Serialize, Deserialize, Clone)]
 pub struct TransformComp {
   pub position: crate::math::Vec3f
 }
@@ -32,13 +32,46 @@ pub struct CompType {
   pub ent_has: fn(EntityRef) -> bool,
   pub ent_add: fn(&mut World, Entity),
   pub ent_rem: fn(&mut World, Entity),
+  pub ent_get: fn(&World, Entity) -> Box<dyn Comp>,
+  pub ent_deserialize: fn(&mut hecs::EntityBuilder, &Box<dyn Comp>)
 }
 
 impl CompType {
   pub fn new<T>(name: &str) -> Self
-    where T: Comp + 'static {
-    Self { name: name.to_string(), type_id: TypeId::of::<T>(), ent_has: T::ent_has, 
-      ent_add: T::ent_add, ent_rem: T::ent_rem }
+    where T: Comp + 'static + Default + Clone + for<'de> serde::Deserialize<'de> {
+    Self { name: name.to_string(), type_id: TypeId::of::<T>(), ent_has: Self::ent_has::<T>, 
+      ent_add: Self::ent_add::<T>, ent_rem: Self::ent_rem::<T>, ent_get: Self::ent_get::<T>,
+      ent_deserialize: Self::ent_deserialize::<T> }
+  }
+
+  fn ent_has<T>(ent: hecs::EntityRef) -> bool
+    where T: Comp + 'static
+  {
+    ent.has::<T>()
+  }
+
+  fn ent_add<T>(world: &mut hecs::World, entity: hecs::Entity) 
+    where T: Comp + Default + 'static
+  {
+    world.insert_one(entity, T::default());
+  }
+
+  fn ent_rem<T>(world: &mut hecs::World, entity: hecs::Entity)
+    where T: Comp + 'static
+  {
+    world.remove_one::<T>(entity);
+  }
+
+  fn ent_get<T>(world: &hecs::World, entity: hecs::Entity) -> Box<dyn Comp>
+    where T: Comp + 'static + Clone
+  {
+    Box::new((*world.get::<&T>(entity).unwrap()).clone())
+  }
+
+  fn ent_deserialize<T>(entity: &mut hecs::EntityBuilder, value: &Box<dyn Comp>) 
+    where T: Comp + for<'de> serde::Deserialize<'de> + 'static + Clone
+  {
+    entity.add::<T>(value.as_ref().as_any().downcast_ref::<T>().unwrap().clone());
   }
 }
 

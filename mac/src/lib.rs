@@ -23,18 +23,14 @@ pub fn comp(item: TokenStream) -> TokenStream
     types.push(name.clone());
   }
 
-  let mut result = String::from("impl crate::engine::Comp for ");
+  let mut result = String::from("#[typetag::serde]");
+  result.push_str("impl crate::engine::Comp for ");
 
   result = result + &name;
 
-  result.push_str("{ fn ent_has(ent: hecs::EntityRef) -> bool { ent.has::<");
-  result = result + &name;
-  result.push_str(">() } fn ent_add(world: &mut hecs::World, ent: hecs::Entity) { world.insert_one(ent, ");
-  result = result + &name;
-  result.push_str("::default()).expect(\"Could not add component!\"); } ");
-  result.push_str("fn ent_rem(world: &mut hecs::World, ent: hecs::Entity) { world.remove_one::<");
-  result = result + &name;
-  result.push_str(">(ent); } ");
+  result.push_str("{");
+  result.push_str("fn as_any(&self) -> &dyn std::any::Any { self }");
+  result.push_str("}");
   /*result.push_str("fn ent_ser<S>(ent: EntityRef, map: S) -> Result<(), S::Error> where S: SerializeMap { ");
   result.push_str("map.serialize_entry(\"");
   result = result + &name;
@@ -42,7 +38,6 @@ pub fn comp(item: TokenStream) -> TokenStream
   result = result + &name;
   result.push_str(">().expect(\"Failed to get component!\"))");
   result.push_str(" }");*/
-  result.push_str(" }");
   result.push_str(format!("inventory::submit! {{ crate::engine::CompType::new::<{}>(\"{}\") }}", name, name).as_str());
 
   result.parse().unwrap()
