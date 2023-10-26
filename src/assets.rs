@@ -25,7 +25,8 @@ pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any {
 pub trait AssetTabViewer {
   fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
     output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue);
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool;
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui, 
+    comp_types: &Vec<crate::engine::CompType>) -> bool;
 }
 
 pub struct ImageAsset {
@@ -125,7 +126,8 @@ impl AssetTabViewer for ImageAssetTabViewer {
       
   }
 
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui, 
+    comp_types: &Vec<crate::engine::CompType>) -> bool {
     if let Some(img) = asset.as_any().downcast_ref::<ImageAsset>() {
       egui::SidePanel::new(egui::panel::Side::Right, egui::Id::new("AssetEditorDockable")).show_inside(ui, |ui| {
         ui.label(format!("Resolution: {} x {}", img.size.x, img.size.y));
@@ -254,7 +256,8 @@ impl AssetTabViewer for ShaderAssetTabViewer {
     
   }
 
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui, 
+    comp_types: &Vec<crate::engine::CompType>) -> bool {
     if let Some(shader) = asset.as_any().downcast_ref::<ShaderAsset>() {
       ui.label(format!("Type: {}", shader.shader_type.to_string()));
 
@@ -515,7 +518,8 @@ impl AssetTabViewer for SceneAssetTabViewer {
     }
   }
 
-  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui) -> bool {    
+  fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui, 
+    comp_types: &Vec<crate::engine::CompType>) -> bool {    
     let mut is_modified = false;
     if let Some(scene) = asset.as_any_mut().downcast_mut::<SceneAsset>() {
       egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
@@ -578,6 +582,18 @@ impl AssetTabViewer for SceneAssetTabViewer {
             scene.world.remove_one::<crate::engine::NameComp>(selected_ent).expect("Failed to remove name!");
             is_modified = true;
           }
+
+          let mut selected_comp = None;
+
+          egui::ComboBox::new("add_component", "").selected_text("Add Comp").show_ui(ui, |ui| {
+            for comp_type in inventory::iter::<crate::engine::CompType> {
+              if comp_type.name != String::from("NameComp") {
+                if ui.selectable_value(&mut selected_comp, Some(comp_type), comp_type.name.clone()).clicked() {
+                  log::info!("Adding {}", comp_type.name)
+                }
+              }
+            }
+          });
         }
       });
 

@@ -28,6 +28,12 @@ pub use log;
 pub use wgpu;
 pub use egui_wgpu_backend;
 pub use egui_extras;
+pub use winit;
+
+#[macro_use]
+extern crate rtti_derive;
+extern crate rtti;
+use rtti::RTTI;
 
 /// A standard Error type used by various engine systems.
 #[derive(Debug, Clone)]

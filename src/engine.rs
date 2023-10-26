@@ -19,7 +19,13 @@ pub struct NameComp {
   pub name: String
 }
 
+#[derive(Comp, Default)]
+pub struct TransformComp {
+  pub position: crate::math::Vec3f
+}
+
 /// Contains metadata defined for a particular component type.
+#[derive(PartialEq)]
 pub struct CompType {
   pub name: String,
   pub type_id: TypeId,
@@ -29,12 +35,14 @@ pub struct CompType {
 }
 
 impl CompType {
-  fn new<T>(name: &str) -> Self
+  pub fn new<T>(name: &str) -> Self
     where T: Comp + 'static {
     Self { name: name.to_string(), type_id: TypeId::of::<T>(), ent_has: T::ent_has, 
       ent_add: T::ent_add, ent_rem: T::ent_rem }
   }
 }
+
+inventory::collect!(CompType);
 
 /// A context containing all engine systems, assets, and metadata.
 pub struct Engine;
@@ -51,7 +59,7 @@ impl Engine {
     log::info!("Initializing engine...");
 
     let event_loop = winit::event_loop::EventLoop::new();
-    let window = winit::window::WindowBuilder::new().with_title("Munera").with_maximized(true).build(&event_loop).unwrap();
+    let window = winit::window::WindowBuilder::new().with_title("Munera").build(&event_loop).unwrap();
 
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
       backends: wgpu::Backends::VULKAN,
@@ -100,6 +108,7 @@ impl Engine {
     let mut egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
     
     let mut app = AppType::default();
+    app.init(&window);
 
     let start_time = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
@@ -112,6 +121,7 @@ impl Engine {
         winit::event::Event::WindowEvent { event, .. } => {
           match event {
             winit::event::WindowEvent::CloseRequested => {
+              app.exit(&window);
               control_flow.set_exit();
             },
             winit::event::WindowEvent::Resized(size) => {
@@ -144,7 +154,7 @@ impl Engine {
 
           egui_winit_plat.begin_frame();
 
-          app.build_ui(&asset_cache, &egui_winit_plat.context(), &device);
+          app.build_ui(&asset_cache, &egui_winit_plat.context(), &device, &comp_types);
 
           let full_output = egui_winit_plat.end_frame(Some(&window));
           let paint_jobs = egui_winit_plat.context().tessellate(full_output.shapes);
@@ -204,5 +214,8 @@ impl<'a, AppType> AppRunner<'a, AppType>
 pub trait App<'a>: Default {
   fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, 
     egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue, output_tex_view: &wgpu::TextureView);
-  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device);
+  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, 
+    device: &wgpu::Device, comp_types: &Vec<crate::engine::CompType>);
+  fn init(&mut self, window: &winit::window::Window);
+  fn exit(&mut self, window: &winit::window::Window);
 }

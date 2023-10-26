@@ -32,3 +32,8 @@ egui_demo_lib = "0.23.0"
 egui_wgpu_backend = "0.26.0"
 egui_dock = { git = "https://github.com/eupraxia05/egui_dock.git", branch = "iter-nodes-mut"  }
 memoffset = "0.9"
+rtti = "0.4.0"
+rtti-derive = "0.4.0"
+inventory = "0.1.11"
+directories = "5.0.1"
+num-traits = "0.2.17"

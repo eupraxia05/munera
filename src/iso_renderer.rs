@@ -1,5 +1,6 @@
 use wgpu::util::DeviceExt;
 
+
 pub struct IsoRenderer {
   pipeline: wgpu::RenderPipeline,
   buffer: wgpu::Buffer
@@ -125,4 +126,9 @@ struct InstanceData {
   position: crate::math::Vec3f,
   _padding: f32,
   color: crate::math::Color
+}
+
+#[derive(Default, mac::Comp, RTTI)]
+struct SceneComp {
+  background_color: crate::math::Color
 }

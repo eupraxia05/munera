@@ -17,11 +17,13 @@ const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 struct DockTabViewer<'a> {
   asset_cache: &'a RefCell<assets::AssetCache>,
   touched_assets: &'a mut Vec<String>,
+  comp_types: &'a Vec<crate::engine::CompType>
 }
 
 impl<'a> DockTabViewer<'a> {
-  fn new(asset_cache: &'a RefCell<assets::AssetCache>, touched_assets: &'a mut Vec<String>) -> Self {
-    Self { asset_cache, touched_assets }
+  fn new(asset_cache: &'a RefCell<assets::AssetCache>, touched_assets: &'a mut Vec<String>,
+    comp_types: &'a Vec<crate::engine::CompType>) -> Self {
+    Self { asset_cache, touched_assets, comp_types }
   }
 }
 
@@ -45,7 +47,7 @@ impl<'a> egui_dock::TabViewer for DockTabViewer<'a> {
       DockTab::Asset { name, viewer } => {
         let mut cache = self.asset_cache.borrow_mut();
         if let Some(ass) = cache.borrow_asset_generic_mut(name) {
-          let modified = viewer.build_dockable_content(ass, ui);
+          let modified = viewer.build_dockable_content(ass, ui, self.comp_types);
           if modified {
             self.touched_assets.push(name.clone());
           }
@@ -109,7 +111,9 @@ impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
     }
   }
 
-  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, device: &wgpu::Device) {
+  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, 
+    device: &wgpu::Device, comp_types: &Vec<crate::engine::CompType>) 
+  {
     TopBottomPanel::top("title_menu").show(egui_context, |ui| {
       self.build_title_menu(ui, asset_cache);
     });
@@ -132,7 +136,28 @@ impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
       self.build_tool_properties(asset_cache, ui, device)
     });
 
-    self.build_dock(asset_cache, egui_context);
+    self.build_dock(asset_cache, egui_context, comp_types);
+  }
+
+  fn init(&mut self, window: &winit::window::Window) {
+    if let Some(base_dirs) = directories::BaseDirs::new() {
+      let path = String::from(base_dirs.cache_dir().to_str().unwrap()) + "/Munera/editor.json";
+      if let Ok(read) = std::fs::read(path) {
+        let save_data = serde_json::from_str::<EditorSaveData>(String::from_utf8(read).unwrap().as_str()).unwrap();
+        window.set_outer_position::<winit::dpi::Position>(save_data.window_pos.into());
+        window.set_inner_size::<winit::dpi::Size>(save_data.window_size.into());
+      }
+    }
+  }
+
+  fn exit(&mut self, window: &winit::window::Window) {
+    if let Some(base_dirs) = directories::BaseDirs::new() {
+      let path = String::from(base_dirs.cache_dir().to_str().unwrap()) + "/Munera";
+      std::fs::create_dir_all(&path);
+      let save_data = EditorSaveData { window_pos: window.outer_position().unwrap().into(), window_size: window.inner_size().into() };
+      let ser = serde_json::to_string_pretty(&save_data).unwrap();
+      std::fs::write(path + "/editor.json", &ser);
+    }
   }
 }
 
@@ -268,36 +293,13 @@ impl<'a, GameAppType> Editor<'a, GameAppType>
     });
   }
 
-  fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext) {
+  fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext,
+      comp_types: &Vec<crate::engine::CompType>) {
     egui::CentralPanel::default().show(ctx, |ui| {
-      let mut viewer = DockTabViewer::new(asset_cache, &mut self.touched_assets);
+      let mut viewer = DockTabViewer::new(asset_cache, &mut self.touched_assets, comp_types);
       egui_dock::DockArea::new(&mut self.dock).style(egui_dock::Style::from_egui(ctx.style().as_ref()))
         .show_inside(ui, &mut viewer);
     });
-    
-    /*TopBottomPanel::top("dock_tabs").show(ctx, |ui| {
-      ui.horizontal(|ui| {
-        let mut close_idx = None;
-        for (idx, dockable) in self.dock.dockables.iter().enumerate() {
-          let tab = ui.button(dockable.title());
-          
-          if tab.clicked() {
-            self.dock.focused_dockable = idx;
-          } else if tab.secondary_clicked() {
-            close_idx = Some(idx);
-          }
-        }
-
-        if let Some(idx) = close_idx {
-          self.dock.dockables.remove(idx);
-        }
-      })
-    });
-    CentralPanel::default().show(ctx, |ui| {
-      if self.dock.dockables.len() > self.dock.focused_dockable {
-        self.dock.dockables[self.dock.focused_dockable].build_content(asset_cache, ui);
-      }
-    });*/
   }
 }
 
@@ -512,154 +514,6 @@ impl Tool for AssetCacheTool {
   }
 }
 
-/*pub trait Dockable {
-  fn title(&self) -> String;
-  fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui);
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) { }
-}
-
-struct AssetEditorDockable {
-  ass_name: String
-}
-
-impl AssetEditorDockable {
-  fn new(asset_cache: &RefCell<assets::AssetCache>, path: &String) -> Result<Self> {
-    let mut cache = asset_cache.borrow_mut();
-    cache.load_file(path)?;
-    Ok( Self { ass_name: path.clone() } )
-  }
-}
-
-impl Dockable for AssetEditorDockable {
-  fn title(&self) -> String {
-    self.ass_name.clone()
-  }
-
-  fn build_content(&mut self, asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
-    let mut ass_cache = asset_cache.borrow_mut();
-    let ass = ass_cache.borrow_asset_generic_mut(&self.ass_name);
-    if ass.is_some() {
-      ass.unwrap().build_dockable_content(ui);
-    }
-  }
-}
-
-struct PlayDockable<GameAppType> {
-  requested_size: math::Vec2u,
-  curr_size: math::Vec2u,
-  image: Option<wgpu::Texture>,
-  tex_id: Option<egui::TextureId>,
-  game_app: GameAppType,
-  egui_rpass: egui_wgpu_backend::RenderPass,
-  egui_ctx: egui::Context
-}
-
-impl<GameAppType> PlayDockable<GameAppType>
-  where GameAppType: crate::engine::App + Default  
-{
-  fn new(device: &wgpu::Device) -> Self {
-    Self { 
-      image: None, 
-      requested_size: math::Vec2u::new(0, 0), 
-      curr_size: math::Vec2u::new(0, 0), 
-      tex_id: None,
-      game_app: GameAppType::default(),
-      egui_rpass: egui_wgpu_backend::RenderPass::new(device, wgpu::TextureFormat::Rgba16Float, 1),
-      egui_ctx: egui::Context::default()
-    }
-  }
-
-  fn update_img(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass) {
-    if self.requested_size.x == 0 || self.requested_size.y == 0 {
-      return;
-    }
-
-    let tex_desc = wgpu::TextureDescriptor {
-      label: Some("PlayDockable"),
-      size: wgpu::Extent3d { 
-        width: self.requested_size.x,
-        height: self.requested_size.y,
-        depth_or_array_layers: 1
-      },
-      mip_level_count: 1,
-      sample_count: 1,
-      dimension: wgpu::TextureDimension::D2,
-      format: wgpu::TextureFormat::Rgba16Float,
-      usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-      view_formats: &[wgpu::TextureFormat::Rgba16Float]
-    };
-
-    if self.image.is_some() {
-      if self.requested_size != self.curr_size {
-        let mut delta = egui::TexturesDelta::default();
-        delta.free.push(self.tex_id.unwrap());
-        egui_rpass.remove_textures(delta);
-        self.image.as_mut().unwrap().destroy();
-      } else {
-        return;
-      }
-    }
-
-    let image = device.create_texture(&tex_desc);
-    log::info!("Creating play texture {} x {}", self.requested_size.x, self.requested_size.y);
-
-    self.tex_id = Some(egui_rpass.egui_texture_from_wgpu_texture(device, 
-      &image.create_view(&wgpu::TextureViewDescriptor::default()), 
-      wgpu::FilterMode::Nearest));
-
-    self.curr_size = self.requested_size;
-    self.image = Some(image);
-  }
-}
-
-impl<GameAppType> Dockable for PlayDockable<GameAppType>
-  where GameAppType: crate::engine::App + Default
-{
-  fn title(&self) -> String {
-    String::from("Play")
-  }
-
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue) {
-    self.update_img(device, egui_rpass);
-
-    if self.image.is_some() {
-      let tex_view = self.image.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
-      let mut input = egui::RawInput::default();
-      input.screen_rect = Some(egui::Rect::from_min_max(egui::Pos2::new(0.0, 0.0), 
-        egui::Pos2::new(self.curr_size.x as f32, self.curr_size.y as f32)));
-      self.egui_ctx.begin_frame(input);
-      self.game_app.build_ui(asset_cache, &self.egui_ctx, device);
-      let result = self.egui_ctx.end_frame();
-      let paint_jobs = self.egui_ctx.tessellate(result.shapes);
-
-      let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("PlayDockable render encoder")
-      });
-
-      let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-        physical_width: self.image.as_ref().unwrap().width(),
-        physical_height: self.image.as_ref().unwrap().height(),
-        scale_factor: 1.0
-      };
-
-      self.egui_rpass.add_textures(device, queue, &result.textures_delta);
-      self.egui_rpass.update_buffers(device, queue, &paint_jobs, &screen_descriptor);
-      self.egui_rpass.execute(&mut encoder, &tex_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK));
-      queue.submit(std::iter::once(encoder.finish()));
-    }
-  }
-
-  fn build_content(&mut self, _asset_cache: &RefCell<assets::AssetCache>, ui: &mut Ui) {
-    let size = ui.available_size();
-    self.requested_size = math::Vec2u::new(size.x as u32, size.y as u32);
-    
-    if self.tex_id.is_some() {
-      ui.image(egui::ImageSource::Texture(egui::load::SizedTexture::new(self.tex_id.unwrap(), Vec2::new(self.curr_size.x as f32, self.curr_size.y as f32))));
-
-    }
-  }
-}*/
-
 trait ImportHandler {
   fn name(&self) -> &'static str;
   fn extensions(&self) -> &[&'static str];
@@ -805,4 +659,10 @@ impl ImportHandler for ShaderImportHandler {
       }
     }
   }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct EditorSaveData {
+  window_pos: crate::math::Vec2i,
+  window_size: crate::math::Vec2u
 }

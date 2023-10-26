@@ -1,5 +1,5 @@
 /// A two-dimensional integer vector.
-#[derive(PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Vec2i {
   pub x : i32,
   pub y : i32
@@ -52,7 +52,29 @@ impl Default for Vec2i {
   }
 }
 
-#[derive(bytemuck::NoUninit, Copy, Clone)]
+impl<T> From<winit::dpi::PhysicalPosition<T>> for Vec2i
+  where T : num_traits::cast::AsPrimitive<i32>
+{
+  fn from(value: winit::dpi::PhysicalPosition<T>) -> Self {
+    Self { x: value.x.as_(), y: value.y.as_() }
+  }
+}
+
+impl<T> From<winit::dpi::PhysicalSize<T>> for Vec2i
+  where T : num_traits::cast::AsPrimitive<i32>
+{
+  fn from(value: winit::dpi::PhysicalSize<T>) -> Self {
+    Self { x: value.width.as_(), y: value.height.as_() }
+  }
+}
+
+impl Into<winit::dpi::Position> for Vec2i {
+  fn into(self) -> winit::dpi::Position {
+    winit::dpi::Position::Physical(winit::dpi::PhysicalPosition::<i32>::new(self.x, self.y))
+  }
+}
+
+#[derive(bytemuck::NoUninit, Copy, Clone, serde::Deserialize, serde::Serialize)]
 #[repr(C)]
 pub struct Vec2u {
   pub x : u32,
@@ -79,6 +101,12 @@ impl Eq for Vec2u {
 
 }
 
+impl Default for Vec2u {
+  fn default() -> Self {
+    Self { x: 0, y: 0 }
+  }
+}
+
 impl Into<egui::Vec2> for Vec2u {
   fn into(self) -> egui::Vec2 {
     egui::Vec2::new(self.x as f32, self.y as f32)
@@ -89,6 +117,28 @@ impl From<egui::Vec2> for Vec2u {
   fn from(value: egui::Vec2) -> Self {
     Self { x: value.x as u32, y: value.y as u32 }
 
+  }
+}
+
+impl Into<winit::dpi::Size> for Vec2u {
+  fn into(self) -> winit::dpi::Size {
+    winit::dpi::Size::Physical(winit::dpi::PhysicalSize::<u32>::new(self.x, self.y))
+  }
+}
+
+impl<T> From<winit::dpi::PhysicalPosition<T>> for Vec2u
+  where T : num_traits::cast::AsPrimitive<u32>
+{
+  fn from(value: winit::dpi::PhysicalPosition<T>) -> Self {
+    Self { x: value.x.as_(), y: value.y.as_() }
+  }
+}
+
+impl<T> From<winit::dpi::PhysicalSize<T>> for Vec2u
+  where T : num_traits::cast::AsPrimitive<u32>
+{
+  fn from(value: winit::dpi::PhysicalSize<T>) -> Self {
+    Self { x: value.width.as_(), y: value.height.as_() }
   }
 }
 
@@ -117,8 +167,15 @@ impl Vec3f {
   }
 }
 
+impl Default for Vec3f {
+  fn default() -> Self {
+    Self {x: 0.0f32, y: 0.0f32, z: 0.0f32}
+  }
+}
+
 #[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
 #[repr(C)]
+#[derive(RTTI)]
 pub struct Color {
   pub r: f32,
   pub g: f32,
@@ -129,5 +186,11 @@ pub struct Color {
 impl Color {
   pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
     Self {r, g, b, a}
+  }
+}
+
+impl Default for Color {
+  fn default() -> Self {
+    Self { r: 0.0f32, g: 0.0f32, b: 0.0f32, a: 0.0f32 }
   }
 }
