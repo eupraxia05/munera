@@ -364,7 +364,7 @@ impl hecs::serialize::row::DeserializeContext for HecsEntDeserializeContext {
       if key == "comps" {
         for comp in value {
           for comp_type in inventory::iter::<crate::engine::CompType>() {
-            if key == comp_type.name {
+            if (*comp).as_any().type_id() == comp_type.type_id {
               (comp_type.ent_deserialize)(entity, &comp);
             }
           }
