@@ -13,15 +13,54 @@ pub trait Comp: erased_serde::Serialize + std::marker::Sync + std::marker::Send 
   fn as_any(&self) -> &dyn std::any::Any;
 }
 
+pub trait CompInspect {
+  fn inspect(&mut self, ui: &mut egui::Ui) -> bool;
+}
+
 /// Utility component to tag entities with a human-friendly name.
 #[derive(Comp, Serialize, Deserialize, Default, Clone)]
 pub struct NameComp {
   pub name: String
 }
 
+impl CompInspect for NameComp {
+  fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
+    let mut modified = false;
+    ui.horizontal(|ui| {
+      ui.label("Name");
+      if ui.text_edit_singleline(&mut self.name).changed() {
+        modified = true;
+      }
+    });
+    modified
+  }
+}
+
 #[derive(Comp, Default, Serialize, Deserialize, Clone)]
 pub struct TransformComp {
   pub position: crate::math::Vec3f
+}
+
+impl CompInspect for TransformComp {
+  fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
+    let mut modified = false;
+    ui.horizontal(|ui| {
+      ui.label("Position");
+      let drag_value_x = egui::DragValue::new(&mut self.position.x);
+      let drag_value_y = egui::DragValue::new(&mut self.position.y);
+      let drag_value_z = egui::DragValue::new(&mut self.position.z);
+      if ui.add(drag_value_x).changed() {
+        modified = true;
+      }
+      if ui.add(drag_value_y).changed() {
+        modified = true;
+      }
+      if ui.add(drag_value_z).changed() {
+        modified = true;
+      }
+    });
+    modified
+  }
 }
 
 /// Contains metadata defined for a particular component type.
@@ -33,15 +72,16 @@ pub struct CompType {
   pub ent_add: fn(&mut World, Entity),
   pub ent_rem: fn(&mut World, Entity),
   pub ent_get: fn(&World, Entity) -> Box<dyn Comp>,
-  pub ent_deserialize: fn(&mut hecs::EntityBuilder, &Box<dyn Comp>)
+  pub ent_deserialize: fn(&mut hecs::EntityBuilder, &Box<dyn Comp>),
+  pub ent_inspect: fn(&mut World, Entity, &mut egui::Ui) -> bool
 }
 
 impl CompType {
   pub fn new<T>(name: &str) -> Self
-    where T: Comp + 'static + Default + Clone + for<'de> serde::Deserialize<'de> {
+    where T: Comp + 'static + Default + Clone + for<'de> serde::Deserialize<'de> + CompInspect {
     Self { name: name.to_string(), type_id: TypeId::of::<T>(), ent_has: Self::ent_has::<T>, 
       ent_add: Self::ent_add::<T>, ent_rem: Self::ent_rem::<T>, ent_get: Self::ent_get::<T>,
-      ent_deserialize: Self::ent_deserialize::<T> }
+      ent_deserialize: Self::ent_deserialize::<T>, ent_inspect: Self::ent_inspect::<T> }
   }
 
   fn ent_has<T>(ent: hecs::EntityRef) -> bool
@@ -72,6 +112,16 @@ impl CompType {
     where T: Comp + for<'de> serde::Deserialize<'de> + 'static + Clone
   {
     entity.add::<T>(value.as_ref().as_any().downcast_ref::<T>().unwrap().clone());
+  }
+
+  fn ent_inspect<T>(world: &mut hecs::World, entity: hecs::Entity, ui: &mut egui::Ui) -> bool
+    where T: Comp + CompInspect + 'static
+  {
+    if let Ok(mut comp) = world.get::<&mut T>(entity) {
+      comp.inspect(ui)
+    } else {
+      false
+    }
   }
 }
 

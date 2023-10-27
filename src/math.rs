@@ -194,3 +194,9 @@ impl Default for Color {
     Self { r: 0.0f32, g: 0.0f32, b: 0.0f32, a: 0.0f32 }
   }
 }
+
+impl Into<wgpu::Color> for Color {
+  fn into(self) -> wgpu::Color {
+    wgpu::Color { r: self.r as f64, g: self.g as f64, b: self.b as f64, a: self.a as f64 }
+  }
+}

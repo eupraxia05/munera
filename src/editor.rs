@@ -76,7 +76,9 @@ impl DockTab {
   {
     match self {
       Self::Asset { name, viewer } => {
-        viewer.tick(device, egui_rpass, output_tex_view, queue)
+        let mut cache = asset_cache.borrow_mut();
+        let ass = cache.borrow_asset_generic_mut(name).unwrap();
+        viewer.tick(ass, device, egui_rpass, output_tex_view, queue)
       }
     }
   }

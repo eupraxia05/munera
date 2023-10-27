@@ -1,5 +1,7 @@
 use wgpu::util::DeviceExt;
 
+use crate::engine::CompInspect;
+
 
 pub struct IsoRenderer {
   pipeline: wgpu::RenderPipeline,
@@ -32,7 +34,7 @@ impl IsoRenderer {
     for i in 0..5 {
       for j in 0..5 {
         let tile = tiles.get_mut(i + j * 5).unwrap();
-        tile.position = crate::math::Vec3f::new(i as f32, j as f32, 0.0);
+        tile.position = crate::math::Vec3f::new(i as f32 - 2.0f32, j as f32 - 2.0f32, 0.0);
         tile.color = crate::math::Color::new(i as f32 / 4.0, j as f32 / 4.0, 0.0, 1.0);
       }
     }
@@ -87,30 +89,33 @@ impl IsoRenderer {
     Self { pipeline, buffer }
   }
 
-  pub fn render(&mut self, encoder: &mut wgpu::CommandEncoder, output_tex_view: &wgpu::TextureView,
+  pub fn render(&mut self, world: &hecs::World, encoder: &mut wgpu::CommandEncoder, output_tex_view: &wgpu::TextureView,
     screen_size: crate::math::Vec2u) 
   {
-    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-      label: Some("IsoRenderer Render Pass"),
-      color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-        view: output_tex_view,
-        resolve_target: None,
-        ops: wgpu::Operations {
-          load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-          store: true
-        }
-      })],
-      depth_stencil_attachment: None,
-    });
-
-    let push_constants = PushConstants {
-      screen_size
-    };
-
-    render_pass.set_pipeline(&self.pipeline);
-    render_pass.set_vertex_buffer(0, self.buffer.slice(0..));
-    render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&push_constants));
-    render_pass.draw(0..6, 0..25);
+    if let Some(scene_ent) = world.iter().find(|ent| ent.has::<SceneComp>()) {
+      let scene_comp = scene_ent.get::<&SceneComp>().unwrap();
+      let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("IsoRenderer Render Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+          view: output_tex_view,
+          resolve_target: None,
+          ops: wgpu::Operations {
+            load: wgpu::LoadOp::Clear(scene_comp.background_color.into()),
+            store: true
+          }
+        })],
+        depth_stencil_attachment: None,
+      });
+  
+      let push_constants = PushConstants {
+        screen_size
+      };
+  
+      render_pass.set_pipeline(&self.pipeline);
+      render_pass.set_vertex_buffer(0, self.buffer.slice(0..));
+      render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&push_constants));
+      render_pass.draw(0..6, 0..25);
+    }
   }
 }
 
@@ -131,4 +136,23 @@ struct InstanceData {
 #[derive(Default, serde::Serialize, serde::Deserialize, mac::Comp, RTTI, Clone)]
 struct SceneComp {
   background_color: crate::math::Color
+}
+
+impl CompInspect for SceneComp {
+  fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
+    let mut modified = false;
+    ui.horizontal(|ui| {
+      ui.label("Background Color");
+      let mut col = &mut [self.background_color.r, self.background_color.g, self.background_color.b, 
+        self.background_color.a];
+      if ui.color_edit_button_rgba_unmultiplied(&mut col).changed() {
+        self.background_color.r = col[0];
+        self.background_color.g = col[1];
+        self.background_color.b = col[2];
+        self.background_color.a = col[3];
+        modified = true;
+      }
+    });
+    modified
+  }
 }

@@ -23,7 +23,7 @@ pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any {
 }
 
 pub trait AssetTabViewer {
-  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
+  fn tick(&mut self, asset: &mut dyn Asset, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
     output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue);
   fn build_dockable_content(&mut self, asset: &mut dyn Asset, ui: &mut egui::Ui, 
     comp_types: &Vec<crate::engine::CompType>) -> bool;
@@ -120,7 +120,7 @@ impl ImageAssetTabViewer {
 }
 
 impl AssetTabViewer for ImageAssetTabViewer {
-  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
+  fn tick(&mut self, asset: &mut dyn Asset, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass, 
     output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
   {
       
@@ -250,7 +250,7 @@ impl Default for ShaderAsset {
 struct ShaderAssetTabViewer;
 
 impl AssetTabViewer for ShaderAssetTabViewer {
-  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
+  fn tick(&mut self, asset: &mut dyn Asset, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
     output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
   {
     
@@ -507,21 +507,23 @@ impl SceneAssetTabViewer {
 }
 
 impl AssetTabViewer for SceneAssetTabViewer {
-  fn tick(&mut self, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
+  fn tick(&mut self, asset: &mut dyn Asset, device: &wgpu::Device, egui_rpass: &mut egui_wgpu_backend::RenderPass,
     output_tex_view: &wgpu::TextureView, queue: &wgpu::Queue) 
   {
-    self.update_scene_render_tex(device, egui_rpass);
-    self.update_iso_renderer(device);
+    if let Some(scene) = asset.as_any_mut().downcast_mut::<SceneAsset>() {
+      self.update_scene_render_tex(device, egui_rpass);
+      self.update_iso_renderer(device);
 
-    if let Some(tex) = &self.scene_render_tex {
-      if let Some(renderer) = &mut self.renderer {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { 
-          label: Some("SceneAssetTabViewer scene render" )
-        });
-    
-        renderer.render(&mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()), self.curr_size);
-    
-        queue.submit(std::iter::once(encoder.finish()));
+      if let Some(tex) = &self.scene_render_tex {
+        if let Some(renderer) = &mut self.renderer {
+          let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { 
+            label: Some("SceneAssetTabViewer scene render" )
+          });
+      
+          renderer.render(&scene.world, &mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()), self.curr_size);
+      
+          queue.submit(std::iter::once(encoder.finish()));
+        }
       }
     }
   }
@@ -591,16 +593,23 @@ impl AssetTabViewer for SceneAssetTabViewer {
             is_modified = true;
           }
 
+          let mut sel_ent_comp_types: Vec<&crate::engine::CompType> = Vec::new();
           {
             let ent = scene.world.entity(selected_ent).unwrap();
             for comp_typeid in ent.component_types() {
               for comp_type in inventory::iter::<crate::engine::CompType> {
                 if comp_type.type_id == comp_typeid && comp_type.name != String::from("NameComp") {
-                  ui.label(comp_type.name.clone());
+                  sel_ent_comp_types.push(comp_type);
                   break;
                 }
               }
             }
+          }
+
+          for comp_type in sel_ent_comp_types {
+            ui.collapsing(comp_type.name.clone(), |ui| {
+              (comp_type.ent_inspect)(&mut scene.world, selected_ent, ui);
+            });
           }
 
           let mut selected_comp = None;
