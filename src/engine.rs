@@ -1,121 +1,101 @@
-use std::any::TypeId;
-use hecs::{EntityRef, Entity, World};
-use serde::{Serialize, Deserialize, ser::SerializeMap};
-use mac::{Comp, define_comps};
-use std::cell::RefCell;
-use std::ops::Deref;
 
-use crate::assets;
-
-// A base trait to generate metadata for a component type.
+/// A base trait covering object-safe parts of the component interface.
+/// Additional non-object-safe functionality is exposed via [`CompExt`].
+/// 
+/// To create a component type from a struct, use `#[derive(mac::Comp)]`. 
+/// The generated [`CompType`]s can be accessed with 
+/// `inventory::iter::<crate::engine::CompType>`.
 #[typetag::serde(tag = "type")]
-pub trait Comp: erased_serde::Serialize + std::marker::Sync + std::marker::Send {
+pub trait Comp: erased_serde::Serialize + std::marker::Sync + std::marker::Send 
+  + 'static 
+{
   fn as_any(&self) -> &dyn std::any::Any;
 }
 
-pub trait CompInspect {
-  fn inspect(&mut self, ui: &mut egui::Ui) -> bool;
+/// Exposes non-object-safe parts of the component interface. See `[Comp]`.
+pub trait CompExt : Comp + crate::editor::inspect::CompInspect + Default
+  + Clone + for<'de> serde::Deserialize<'de>
+{
+
 }
 
-/// Utility component to tag entities with a human-friendly name.
-#[derive(Comp, Serialize, Deserialize, Default, Clone)]
-pub struct NameComp {
-  pub name: String
-}
-
-impl CompInspect for NameComp {
-  fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
-    let mut modified = false;
-    ui.horizontal(|ui| {
-      ui.label("Name");
-      if ui.text_edit_singleline(&mut self.name).changed() {
-        modified = true;
-      }
-    });
-    modified
-  }
-}
-
-#[derive(Comp, Default, Serialize, Deserialize, Clone)]
-pub struct TransformComp {
-  pub position: crate::math::Vec3f
-}
-
-impl CompInspect for TransformComp {
-  fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
-    let mut modified = false;
-    ui.horizontal(|ui| {
-      ui.label("Position");
-      let drag_value_x = egui::DragValue::new(&mut self.position.x);
-      let drag_value_y = egui::DragValue::new(&mut self.position.y);
-      let drag_value_z = egui::DragValue::new(&mut self.position.z);
-      if ui.add(drag_value_x).changed() {
-        modified = true;
-      }
-      if ui.add(drag_value_y).changed() {
-        modified = true;
-      }
-      if ui.add(drag_value_z).changed() {
-        modified = true;
-      }
-    });
-    modified
-  }
-}
-
-/// Contains metadata defined for a particular component type.
+/// Contains metadata defined for a particular component type. Privately, this
+/// implements a bunch of generic functions and stores them as function
+/// pointers. The `Comp` macro stores this for a component type, and they are
+/// iterable using `inventory::iter::<crate::engine::CompType>`.
 #[derive(PartialEq)]
 pub struct CompType {
+  /// The name of the component type.
   pub name: String,
-  pub type_id: TypeId,
-  pub ent_has: fn(EntityRef) -> bool,
-  pub ent_add: fn(&mut World, Entity),
-  pub ent_rem: fn(&mut World, Entity),
-  pub ent_get: fn(&World, Entity) -> Box<dyn Comp>,
+
+  /// The type id of the component type.
+  pub type_id: std::any::TypeId,
+
+  /// A function to check if an entity has this component type.
+  pub ent_has: fn(hecs::EntityRef) -> bool,
+
+  /// A function to add this component (constructed with `Default::default()`)
+  /// to a given entity.
+  pub ent_add: fn(&mut hecs::World, hecs::Entity),
+
+  /// A function to remove this component from a given entity.
+  pub ent_rem: fn(&mut hecs::World, hecs::Entity),
+
+  /// A function to get this component generically, copied, from the component.
+  pub ent_get: fn(&hecs::World, hecs::Entity) -> Box<dyn Comp>,
+
+  /// A function to copy to the component from a deserialized component.
+  // !TODO: probably a better solution here
   pub ent_deserialize: fn(&mut hecs::EntityBuilder, &Box<dyn Comp>),
-  pub ent_inspect: fn(&mut World, Entity, &mut egui::Ui) -> bool
+
+  /// A function to show the component in the inspector.
+  pub ent_inspect: fn(&mut hecs::World, hecs::Entity, &mut egui::Ui) -> bool
 }
 
 impl CompType {
   pub fn new<T>(name: &str) -> Self
-    where T: Comp + 'static + Default + Clone + for<'de> serde::Deserialize<'de> + CompInspect {
-    Self { name: name.to_string(), type_id: TypeId::of::<T>(), ent_has: Self::ent_has::<T>, 
+    where T: CompExt  {
+    Self { name: name.to_string(), type_id: std::any::TypeId::of::<T>(), ent_has: Self::ent_has::<T>, 
       ent_add: Self::ent_add::<T>, ent_rem: Self::ent_rem::<T>, ent_get: Self::ent_get::<T>,
       ent_deserialize: Self::ent_deserialize::<T>, ent_inspect: Self::ent_inspect::<T> }
   }
 
   fn ent_has<T>(ent: hecs::EntityRef) -> bool
-    where T: Comp + 'static
+    where T: CompExt
   {
     ent.has::<T>()
   }
 
   fn ent_add<T>(world: &mut hecs::World, entity: hecs::Entity) 
-    where T: Comp + Default + 'static
+    where T: CompExt
   {
-    world.insert_one(entity, T::default());
+    if let Err(e) = world.insert_one(entity, T::default()) {
+      log::error!("Couldn't add component to entity: {}", e);
+    }
   }
 
   fn ent_rem<T>(world: &mut hecs::World, entity: hecs::Entity)
-    where T: Comp + 'static
+    where T: CompExt
   {
-    world.remove_one::<T>(entity);
+    if let Err(e) = world.remove_one::<T>(entity) {
+      log::error!("Couldn't remove component from entity: {}", e);
+    }
   }
 
   fn ent_get<T>(world: &hecs::World, entity: hecs::Entity) -> Box<dyn Comp>
-    where T: Comp + 'static + Clone
+    where T: CompExt
   {
     Box::new((*world.get::<&T>(entity).unwrap()).clone())
   }
 
   fn ent_deserialize<T>(entity: &mut hecs::EntityBuilder, value: &Box<dyn Comp>) 
-    where T: Comp + for<'de> serde::Deserialize<'de> + 'static + Clone
+    where T: CompExt
   {
     entity.add::<T>(value.as_ref().as_any().downcast_ref::<T>().unwrap().clone());
   }
 
   fn ent_inspect<T>(world: &mut hecs::World, entity: hecs::Entity, ui: &mut egui::Ui) -> bool
-    where T: Comp + CompInspect + 'static
+    where T: CompExt
   {
     if let Ok(mut comp) = world.get::<&mut T>(entity) {
       comp.inspect(ui)
@@ -128,177 +108,176 @@ impl CompType {
 inventory::collect!(CompType);
 
 /// A context containing all engine systems, assets, and metadata.
-pub struct Engine;
+pub fn run<'a, AppType: App<'a> + 'static>() {
+  let asset_cache = std::cell::RefCell::new(crate::assets::AssetCache::new());
+  
+  log::set_logger(&crate::logger::LOGGER)
+    .map(|()| log::set_max_level(log::LevelFilter::Info))
+    .expect("Couldn't set logger!");
 
-impl Engine {
-  pub fn run<'a, AppType: App<'a> + 'static>() {
-    let comp_types = define_comps!(); 
-    let asset_cache = RefCell::new(assets::AssetCache::new());
-    
-    log::set_logger(&crate::logger::LOGGER)
-      .map(|()| log::set_max_level(log::LevelFilter::Info))
-      .expect("Couldn't set logger!");
+  log::info!("Initializing engine...");
 
-    log::info!("Initializing engine...");
+  let event_loop = winit::event_loop::EventLoop::new();
+  let window = winit::window::WindowBuilder::new().with_title("Munera").build(&event_loop).unwrap();
 
-    let event_loop = winit::event_loop::EventLoop::new();
-    let window = winit::window::WindowBuilder::new().with_title("Munera").build(&event_loop).unwrap();
+  let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+    backends: wgpu::Backends::VULKAN,
+    dx12_shader_compiler: wgpu::Dx12Compiler::Fxc
+  });
+  let surface = unsafe { instance.create_surface(&window).unwrap() };
 
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-      backends: wgpu::Backends::VULKAN,
-      dx12_shader_compiler: wgpu::Dx12Compiler::Fxc
-    });
-    let surface = unsafe { instance.create_surface(&window).unwrap() };
+  let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+    power_preference: wgpu::PowerPreference::HighPerformance,
+    compatible_surface: Some(&surface),
+    force_fallback_adapter: false
+  })).unwrap();
 
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-      power_preference: wgpu::PowerPreference::HighPerformance,
-      compatible_surface: Some(&surface),
-      force_fallback_adapter: false
-    })).unwrap();
+  let mut limits = wgpu::Limits::default();
+  limits.max_push_constant_size = 128;
 
-    let mut limits = wgpu::Limits::default();
-    limits.max_push_constant_size = 128;
+  let (device, queue) = pollster::block_on(adapter.request_device(
+    &wgpu::DeviceDescriptor {
+      features: wgpu::Features::default() | wgpu::Features::PUSH_CONSTANTS,
+      limits,
+      label: None,
+    }, None
+  )).unwrap();
 
-    let (device, queue) = pollster::block_on(adapter.request_device(
-      &wgpu::DeviceDescriptor {
-        features: wgpu::Features::default() | wgpu::Features::PUSH_CONSTANTS,
-        limits,
-        label: None,
-      }, None
-    )).unwrap();
+  let size = window.inner_size();
+  let surface_format = surface.get_capabilities(&adapter).formats[0];
+  let mut surface_config = wgpu::SurfaceConfiguration {
+    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+    format: surface_format,
+    width: size.width as u32,
+    height: size.height as u32,
+    present_mode: wgpu::PresentMode::AutoVsync,
+    alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+    view_formats: vec![]
+  };
+  surface.configure(&device, &surface_config);
 
-    let size = window.inner_size();
-    let surface_format = surface.get_capabilities(&adapter).formats[0];
-    let mut surface_config = wgpu::SurfaceConfiguration {
-      usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-      format: surface_format,
-      width: size.width as u32,
-      height: size.height as u32,
-      present_mode: wgpu::PresentMode::AutoVsync,
-      alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-      view_formats: vec![]
-    };
-    surface.configure(&device, &surface_config);
+  let mut egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+    physical_width: size.width as u32,
+    physical_height: size.height as u32,
+    scale_factor: window.scale_factor(),
+    font_definitions: Default::default(),
+    style: Default::default()
+  });
 
-    let mut egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
-      physical_width: size.width as u32,
-      physical_height: size.height as u32,
-      scale_factor: window.scale_factor(),
-      font_definitions: Default::default(),
-      style: Default::default()
-    });
+  let mut egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
+  
+  let mut app = AppType::default();
+  app.init(&window);
 
-    let mut egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
-    
-    let mut app = AppType::default();
-    app.init(&window);
+  let start_time = std::time::Instant::now();
+  event_loop.run(move |event, _, control_flow| {
 
-    let start_time = std::time::Instant::now();
-    event_loop.run(move |event, _, control_flow| {
+    control_flow.set_poll();
 
-      control_flow.set_poll();
+    egui_winit_plat.handle_event(&event);
 
-      egui_winit_plat.handle_event(&event);
-
-      match event {
-        winit::event::Event::WindowEvent { event, .. } => {
-          match event {
-            winit::event::WindowEvent::CloseRequested => {
-              app.exit(&window);
-              control_flow.set_exit();
-            },
-            winit::event::WindowEvent::Resized(size) => {
-              if size.width > 0 && size.height > 0 {
-                surface_config.width = size.width;
-                surface_config.height = size.height;
-                surface.configure(&device, &surface_config);
-              }
+    match event {
+      winit::event::Event::WindowEvent { event, .. } => {
+        match event {
+          winit::event::WindowEvent::CloseRequested => {
+            app.exit(&window);
+            control_flow.set_exit();
+          },
+          winit::event::WindowEvent::Resized(size) => {
+            if size.width > 0 && size.height > 0 {
+              surface_config.width = size.width;
+              surface_config.height = size.height;
+              surface.configure(&device, &surface_config);
             }
-            _ => ()
           }
-        },
-        winit::event::Event::MainEventsCleared => {
-          egui_winit_plat.update_time(start_time.elapsed().as_secs_f64());
-
-          let output_frame = match surface.get_current_texture() {
-            Ok(frame) => frame,
-            Err(wgpu::SurfaceError::Outdated) => {
-              return;
-            },
-            Err(e) => {
-              log::error!("Dropped frame with error: {}", e);
-              return;
-            }
-          };
-
-          let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-          app.tick(0.0, &device, &asset_cache, &mut egui_rpass, &queue, &output_view);
-
-          egui_winit_plat.begin_frame();
-
-          app.build_ui(&asset_cache, &egui_winit_plat.context(), &device, &comp_types);
-
-          let full_output = egui_winit_plat.end_frame(Some(&window));
-          let paint_jobs = egui_winit_plat.context().tessellate(full_output.shapes);
-
-          let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("encoder")
-          });
-
-          let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
-            physical_width: window.inner_size().width,
-            physical_height: window.inner_size().height,
-            scale_factor: window.scale_factor() as f32
-          };
-
-          egui_rpass.add_textures(&device, &queue, &full_output.textures_delta)
-            .expect("Failed to add textures!");
-
-          egui_rpass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
-
-          egui_rpass.execute(&mut encoder, &output_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK))
-            .expect("Failed to execute egui rendering!");
-
-          queue.submit(std::iter::once(encoder.finish()));
-
-          output_frame.present();
-
-          egui_rpass.remove_textures(full_output.textures_delta)
-            .expect("Failed to remove textures!");
+          _ => ()
         }
-        _ => ()
+      },
+      winit::event::Event::MainEventsCleared => {
+        egui_winit_plat.update_time(start_time.elapsed().as_secs_f64());
+
+        let output_frame = match surface.get_current_texture() {
+          Ok(frame) => frame,
+          Err(wgpu::SurfaceError::Outdated) => {
+            return;
+          },
+          Err(e) => {
+            log::error!("Dropped frame with error: {}", e);
+            return;
+          }
+        };
+
+        let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+
+        app.tick(&mut AppTickInfo {
+          dt: 0.0, 
+          device: &device, 
+          asset_cache: &asset_cache, 
+          egui_rpass: &mut egui_rpass, 
+          queue: &queue, 
+          output_tex_view: &output_view
+        });
+
+        egui_winit_plat.begin_frame();
+
+        app.build_ui(&AppBuildUiInfo {
+          asset_cache: &asset_cache, 
+          egui_context: &egui_winit_plat.context(), 
+          device: &device 
+        });
+
+        let full_output = egui_winit_plat.end_frame(Some(&window));
+        let paint_jobs = egui_winit_plat.context().tessellate(full_output.shapes);
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+          label: Some("encoder")
+        });
+
+        let screen_descriptor = egui_wgpu_backend::ScreenDescriptor {
+          physical_width: window.inner_size().width,
+          physical_height: window.inner_size().height,
+          scale_factor: window.scale_factor() as f32
+        };
+
+        egui_rpass.add_textures(&device, &queue, &full_output.textures_delta)
+          .expect("Failed to add textures!");
+
+        egui_rpass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
+
+        egui_rpass.execute(&mut encoder, &output_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK))
+          .expect("Failed to execute egui rendering!");
+
+        queue.submit(std::iter::once(encoder.finish()));
+
+        output_frame.present();
+
+        egui_rpass.remove_textures(full_output.textures_delta)
+          .expect("Failed to remove textures!");
       }
-    });
-  }
-}
-
-pub struct AppRunner<'a, AppType>
-  where AppType: App<'a> + 'static
-{
-  phantom_data: std::marker::PhantomData<&'a AppType>
-}
-
-impl<'a, AppType> AppRunner<'a, AppType> 
-  where AppType: App<'a>
-{
-  pub fn new() -> Self {
-    Self { 
-      phantom_data: Default::default()
+      _ => ()
     }
-  }
+  });
+}
 
-  pub fn run<'b>(&'b mut self) {
-    let mut app = AppType::default();
-    Engine::run::<AppType>();
-  }
+pub struct AppTickInfo<'a> {
+  pub dt: f32,
+  pub device: &'a wgpu::Device,
+  pub asset_cache: &'a std::cell::RefCell<crate::assets::AssetCache>,
+  pub egui_rpass: &'a mut egui_wgpu_backend::RenderPass,
+  pub queue: &'a wgpu::Queue,
+  pub output_tex_view: &'a wgpu::TextureView,
+}
+
+pub struct AppBuildUiInfo<'a> {
+  pub asset_cache: &'a std::cell::RefCell<crate::assets::AssetCache>,
+  pub egui_context: &'a egui::Context,
+  pub device: &'a wgpu::Device,
 }
 
 pub trait App<'a>: Default {
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, 
-    egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue, output_tex_view: &wgpu::TextureView);
-  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, 
-    device: &wgpu::Device, comp_types: &Vec<crate::engine::CompType>);
-  fn init(&mut self, window: &winit::window::Window);
-  fn exit(&mut self, window: &winit::window::Window);
+  fn tick(&mut self, _tick_info: &mut AppTickInfo) { }
+  fn build_ui(&mut self, _build_ui_info: &AppBuildUiInfo) { }
+  fn init(&mut self, _window: &winit::window::Window) { }
+  fn exit(&mut self, _window: &winit::window::Window) { }
 }

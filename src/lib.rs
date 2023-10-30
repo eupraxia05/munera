@@ -20,6 +20,9 @@ pub mod assets;
 // An isometric renderer.
 pub mod iso_renderer;
 
+mod misc_comps;
+pub use misc_comps::*;
+
 /// A standard Result type used by various engine systems.
 pub type Result<T> = std::result::Result<T, Error>;
 

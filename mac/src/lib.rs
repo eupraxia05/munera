@@ -24,6 +24,7 @@ pub fn comp(item: TokenStream) -> TokenStream
   }
 
   let mut result = String::from("#[typetag::serde]");
+  result.push_str("#[allow(non_snake_case)]");
   result.push_str("impl crate::engine::Comp for ");
 
   result = result + &name;
@@ -31,6 +32,9 @@ pub fn comp(item: TokenStream) -> TokenStream
   result.push_str("{");
   result.push_str("fn as_any(&self) -> &dyn std::any::Any { self }");
   result.push_str("}");
+  result.push_str(format!("impl crate::engine::CompExt for {} {{", name).as_str());
+  result.push_str("}");
+
   /*result.push_str("fn ent_ser<S>(ent: EntityRef, map: S) -> Result<(), S::Error> where S: SerializeMap { ");
   result.push_str("map.serialize_entry(\"");
   result = result + &name;

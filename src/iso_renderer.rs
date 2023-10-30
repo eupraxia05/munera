@@ -1,8 +1,5 @@
 use wgpu::util::DeviceExt;
 
-use crate::engine::CompInspect;
-
-
 pub struct IsoRenderer {
   pipeline: wgpu::RenderPipeline,
   buffer: wgpu::Buffer,
@@ -140,7 +137,7 @@ struct SceneComp {
   pixel_scale: u32
 }
 
-impl CompInspect for SceneComp {
+impl crate::editor::inspect::CompInspect for SceneComp {
   fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
     let mut modified = false;
     ui.horizontal(|ui| {

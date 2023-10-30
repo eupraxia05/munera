@@ -2,7 +2,6 @@ use egui::{TopBottomPanel, Ui, SidePanel, CentralPanel, Context as EguiContext, 
 use image::{ImageBuffer, EncodableLayout};
 use shaderc::ShaderKind;
 
-use crate::engine::{Engine};
 use std::io::Write;
 use std::cell::RefCell;
 use std::fs;
@@ -11,19 +10,19 @@ use image::Rgba;
 use std::fs::File;
 use crate::{assets, Result, math};
 
+pub mod inspect;
+
 const TOOLBAR_WIDTH: f32 = 32.0f32;
 const MIN_CONSOLE_HEIGHT: f32 = 256.0f32;
 
 struct DockTabViewer<'a> {
   asset_cache: &'a RefCell<assets::AssetCache>,
   touched_assets: &'a mut Vec<String>,
-  comp_types: &'a Vec<crate::engine::CompType>
 }
 
 impl<'a> DockTabViewer<'a> {
-  fn new(asset_cache: &'a RefCell<assets::AssetCache>, touched_assets: &'a mut Vec<String>,
-    comp_types: &'a Vec<crate::engine::CompType>) -> Self {
-    Self { asset_cache, touched_assets, comp_types }
+  fn new(asset_cache: &'a RefCell<assets::AssetCache>, touched_assets: &'a mut Vec<String>) -> Self {
+    Self { asset_cache, touched_assets }
   }
 }
 
@@ -47,7 +46,7 @@ impl<'a> egui_dock::TabViewer for DockTabViewer<'a> {
       DockTab::Asset { name, viewer } => {
         let mut cache = self.asset_cache.borrow_mut();
         if let Some(ass) = cache.borrow_asset_generic_mut(name) {
-          let modified = viewer.build_dockable_content(ass, ui, self.comp_types);
+          let modified = viewer.build_dockable_content(ass, ui);
           if modified {
             self.touched_assets.push(name.clone());
           }
@@ -99,30 +98,28 @@ pub struct Editor<'a, GameAppType>
 impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
   where GameAppType: for<'b> crate::engine::App<'b> + 'static + Default
 {
-  fn tick(&mut self, dt: f32, device: &wgpu::Device, asset_cache: &RefCell<assets::AssetCache>, 
-    egui_rpass: &mut egui_wgpu_backend::RenderPass, queue: &wgpu::Queue, 
-    output_tex_view: &wgpu::TextureView) 
+  fn tick(&mut self, tick_info: &mut crate::engine::AppTickInfo) 
   {
     for node in self.dock.iter_nodes_mut() {
       if let Some(tabs) = node.tabs_mut() {
         for tab in tabs {
-          tab.tick(asset_cache, device, egui_rpass, output_tex_view, queue);
+          tab.tick(tick_info.asset_cache, tick_info.device, tick_info.egui_rpass, tick_info.output_tex_view, 
+            tick_info.queue);
         }
       }
       
     }
   }
 
-  fn build_ui(&mut self, asset_cache: &RefCell<assets::AssetCache>, egui_context: &egui::Context, 
-    device: &wgpu::Device, comp_types: &Vec<crate::engine::CompType>) 
+  fn build_ui(&mut self, build_ui_info: &crate::engine::AppBuildUiInfo) 
   {
-    TopBottomPanel::top("title_menu").show(egui_context, |ui| {
-      self.build_title_menu(ui, asset_cache);
+    TopBottomPanel::top("title_menu").show(build_ui_info.egui_context, |ui| {
+      self.build_title_menu(ui, build_ui_info.asset_cache);
     });
     SidePanel::left("toolbar")
       .exact_width(TOOLBAR_WIDTH)
       .resizable(false)
-      .show(egui_context, |ui| {
+      .show(build_ui_info.egui_context, |ui| {
       self.build_toolbar(ui)
     });
     TopBottomPanel::bottom("console")
@@ -130,15 +127,15 @@ impl<'a, GameAppType> crate::engine::App<'a> for Editor<'a, GameAppType>
       .min_height(MIN_CONSOLE_HEIGHT)
       .frame(Frame::default()
         .inner_margin(Margin::same(0.0)))
-      .show(egui_context, |ui| 
+      .show(build_ui_info.egui_context, |ui| 
     {
       self.build_console(ui)
     });
-    SidePanel::left("tool_properties").resizable(true).show(egui_context, |ui| {
-      self.build_tool_properties(asset_cache, ui, device)
+    SidePanel::left("tool_properties").resizable(true).show(build_ui_info.egui_context, |ui| {
+      self.build_tool_properties(build_ui_info.asset_cache, ui, build_ui_info.device)
     });
 
-    self.build_dock(asset_cache, egui_context, comp_types);
+    self.build_dock(build_ui_info.asset_cache, build_ui_info.egui_context);
   }
 
   fn init(&mut self, window: &winit::window::Window) {
@@ -186,7 +183,7 @@ impl<'a, GameAppType> Editor<'a, GameAppType>
       selected_tool_idx: None,
       dock: egui_dock::DockState::new(Vec::new()),
       console_command_input_text: String::default(),
-      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../ass/munera.png"))
+      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../ass/munera.png"))
         .expect("Failed to load title image!"),
       touched_assets: Vec::new(),
    }
@@ -295,10 +292,9 @@ impl<'a, GameAppType> Editor<'a, GameAppType>
     });
   }
 
-  fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext,
-      comp_types: &Vec<crate::engine::CompType>) {
+  fn build_dock(&mut self, asset_cache: &RefCell<assets::AssetCache>, ctx: &EguiContext) {
     egui::CentralPanel::default().show(ctx, |ui| {
-      let mut viewer = DockTabViewer::new(asset_cache, &mut self.touched_assets, comp_types);
+      let mut viewer = DockTabViewer::new(asset_cache, &mut self.touched_assets);
       egui_dock::DockArea::new(&mut self.dock).style(egui_dock::Style::from_egui(ctx.style().as_ref()))
         .show_inside(ui, &mut viewer);
     });
@@ -329,7 +325,7 @@ impl AssetBrowserTool {
         Box::new(ShaderImportHandler::new())],
       selected_asset: None,
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_browser_tool_button", 
-        include_bytes!("../ass/asset_browser.png")).expect("Failed to load image!"),
+        include_bytes!("../../ass/asset_browser.png")).expect("Failed to load image!"),
       new_asset_name: String::from(""),
     }
   }
@@ -462,7 +458,7 @@ impl<GameAppType> PlayTool<GameAppType>
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("play_tool_button", 
-        include_bytes!("../ass/play.png")).expect("Failed to load image!"),
+        include_bytes!("../../ass/play.png")).expect("Failed to load image!"),
       phantom_data: std::marker::PhantomData::default()
     }
   }
@@ -488,7 +484,7 @@ impl AssetCacheTool {
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_cache_tool_button", 
-        include_bytes!("../ass/registry_editor.png")).expect("Failed to load image!")
+        include_bytes!("../../ass/registry_editor.png")).expect("Failed to load image!")
     }
   }
 }
