@@ -2,4 +2,4 @@ debug/
 target/
 mac/debug/
 mac/target/
-Cargo.lock
+**/Cargo.lock

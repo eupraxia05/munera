@@ -11,7 +11,7 @@ impl IsoRenderer {
   pub fn new(device: &wgpu::Device, output_format: wgpu::ColorTargetState) -> Self {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: Some("triangle shader"),
-      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../ass/shader.wgsl")))
+      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../assets/shader.wgsl")))
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor{
@@ -145,7 +145,7 @@ struct InstanceData {
   color: crate::math::Color
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, mac::Comp, RTTI, Clone)]
+#[derive(Default, serde::Serialize, serde::Deserialize, munera_macros::Comp, RTTI, Clone)]
 struct SceneComp {
   background_color: crate::math::Color,
 
@@ -178,7 +178,7 @@ impl crate::editor::inspect::CompInspect for SceneComp {
   }
 }
 
-#[derive(Default, serde::Deserialize, serde::Serialize, mac::Comp, Clone)]
+#[derive(Default, serde::Deserialize, serde::Serialize, munera_macros::Comp, Clone)]
 struct CubeComp;
 
 impl crate::editor::inspect::CompInspect for CubeComp {
@@ -229,7 +229,7 @@ impl Gbuffer {
 
     let upscale_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: None,
-      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../ass/upscale_shader.wgsl"))),
+      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../assets/upscale_shader.wgsl"))),
     });
 
     let upscale_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -434,7 +434,7 @@ impl BasePassSpriteBatcher {
       wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
-          include_str!("../ass/sprite_batch.wgsl")))
+          include_str!("../assets/sprite_batch.wgsl")))
       }
     );
 

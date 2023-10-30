@@ -183,7 +183,7 @@ impl<'a, GameAppType> Editor<'a, GameAppType>
       selected_tool_idx: None,
       dock: egui_dock::DockState::new(Vec::new()),
       console_command_input_text: String::default(),
-      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../ass/munera.png"))
+      title_img: egui_extras::RetainedImage::from_image_bytes("title_img", include_bytes!("../../assets/munera.png"))
         .expect("Failed to load title image!"),
       touched_assets: Vec::new(),
    }
@@ -325,7 +325,7 @@ impl AssetBrowserTool {
         Box::new(ShaderImportHandler::new())],
       selected_asset: None,
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_browser_tool_button", 
-        include_bytes!("../../ass/asset_browser.png")).expect("Failed to load image!"),
+        include_bytes!("../../assets/asset_browser.png")).expect("Failed to load image!"),
       new_asset_name: String::from(""),
     }
   }
@@ -406,14 +406,14 @@ impl Tool for AssetBrowserTool {
       }
     });
 
-    let paths = fs::read_dir("./ass/").unwrap();
+    let paths = fs::read_dir("./assets/").unwrap();
 
     for path in paths {
       let p = path.unwrap().file_name();
       let name = p.to_str().unwrap();
       let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
       if ui.selectable_label(is_selected, name).clicked() {
-        let file_path = String::from("./ass/") + &String::from(name);
+        let file_path = String::from("./assets/") + &String::from(name);
         match DockTab::from_asset(&file_path, asset_cache) {
           Ok(tab) => {
             dock.push_to_focused_leaf(tab);
@@ -458,7 +458,7 @@ impl<GameAppType> PlayTool<GameAppType>
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("play_tool_button", 
-        include_bytes!("../../ass/play.png")).expect("Failed to load image!"),
+        include_bytes!("../../assets/play.png")).expect("Failed to load image!"),
       phantom_data: std::marker::PhantomData::default()
     }
   }
@@ -484,7 +484,7 @@ impl AssetCacheTool {
   fn new() -> Self {
     Self {
       button_img: egui_extras::RetainedImage::from_image_bytes("asset_cache_tool_button", 
-        include_bytes!("../../ass/registry_editor.png")).expect("Failed to load image!")
+        include_bytes!("../../assets/registry_editor.png")).expect("Failed to load image!")
     }
   }
 }

@@ -61,7 +61,7 @@ impl std::fmt::Display for Error {
 #[cfg(test)]
 mod tests {
 
-  #[derive(mac::Comp, serde::Serialize, serde::Deserialize, Clone, Copy, 
+  #[derive(munera_macros::Comp, serde::Serialize, serde::Deserialize, Clone, Copy, 
     Default)]
   struct FooComp {
 

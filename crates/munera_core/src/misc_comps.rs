@@ -1,5 +1,5 @@
 /// Utility component to tag entities with a human-friendly name.
-#[derive(mac::Comp, serde::Serialize, serde::Deserialize, Default, Clone)]
+#[derive(munera_macros::Comp, serde::Serialize, serde::Deserialize, Default, Clone)]
 pub struct NameComp {
   pub name: String
 }
@@ -10,7 +10,7 @@ impl crate::editor::inspect::CompInspect for NameComp {
   }
 }
 
-#[derive(mac::Comp, Default, serde::Serialize, serde::Deserialize, Clone)]
+#[derive(munera_macros::Comp, Default, serde::Serialize, serde::Deserialize, Clone)]
 pub struct TransformComp {
   pub position: crate::math::Vec3f
 }

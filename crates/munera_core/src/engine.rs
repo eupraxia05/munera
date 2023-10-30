@@ -2,7 +2,7 @@
 /// A base trait covering object-safe parts of the component interface.
 /// Additional non-object-safe functionality is exposed via [`CompExt`].
 /// 
-/// To create a component type from a struct, use `#[derive(mac::Comp)]`. 
+/// To create a component type from a struct, use `#[derive(munera_macros::Comp)]`. 
 /// The generated [`CompType`]s can be accessed with 
 /// `inventory::iter::<crate::engine::CompType>`.
 #[typetag::serde(tag = "type")]
@@ -161,6 +161,10 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
       label: None,
     }, None
   )).unwrap();
+
+  device.on_uncaptured_error(Box::new(|error| {
+    log::error!("{}", error);
+  }));
 
   let size = window.inner_size();
   let surface_format = surface.get_capabilities(&adapter).formats[0];
