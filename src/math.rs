@@ -1,3 +1,5 @@
+use std::ops::{DivAssign, MulAssign};
+
 /// A two-dimensional integer vector.
 #[derive(PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Vec2i {
@@ -139,6 +141,22 @@ impl<T> From<winit::dpi::PhysicalSize<T>> for Vec2u
 {
   fn from(value: winit::dpi::PhysicalSize<T>) -> Self {
     Self { x: value.width.as_(), y: value.height.as_() }
+  }
+}
+
+impl std::ops::Mul<u32> for Vec2u {
+  type Output = Vec2u;
+
+  fn mul(self, rhs: u32) -> Self::Output {
+    Vec2u { x: self.x * rhs, y: self.y * rhs }
+  }
+}
+
+impl std::ops::Div<u32> for Vec2u {
+  type Output = Vec2u;
+
+  fn div(self, rhs: u32) -> Self::Output {
+    Vec2u { x: self.x / rhs, y: self.y / rhs }
   }
 }
 

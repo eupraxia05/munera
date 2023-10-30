@@ -31,7 +31,7 @@ pub struct Logger {
 
 impl log::Log for Logger {
   fn enabled(&self, metadata: &log::Metadata) -> bool {
-    true // !metadata.target().starts_with("wgpu") || metadata.level() <= log::Level::Warn
+    !metadata.target().starts_with("wgpu") || metadata.level() <= log::Level::Warn
   }
 
   fn log(&self, record: &log::Record) {

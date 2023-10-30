@@ -520,7 +520,7 @@ impl AssetTabViewer for SceneAssetTabViewer {
             label: Some("SceneAssetTabViewer scene render" )
           });
       
-          renderer.render(&scene.world, &mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()), self.curr_size);
+          renderer.render(&scene.world, device, &mut encoder, &tex.create_view(&wgpu::TextureViewDescriptor::default()), self.curr_size);
       
           queue.submit(std::iter::once(encoder.finish()));
         }
@@ -533,10 +533,17 @@ impl AssetTabViewer for SceneAssetTabViewer {
     let mut is_modified = false;
     if let Some(scene) = asset.as_any_mut().downcast_mut::<SceneAsset>() {
       egui::SidePanel::right("ent_comp_list").show_inside(ui, |ui| {
-        if ui.button("New Ent").clicked() {
-          scene.world.spawn(());
-          is_modified = true;
-        }
+        ui.horizontal(|ui| {
+          if ui.button("+ Ent").clicked() {
+            scene.world.spawn(());
+            is_modified = true;
+          } else if self.selected_ent.is_some() && ui.button("- Ent").clicked() {
+            scene.world.despawn(self.selected_ent.unwrap());
+            is_modified = true;
+            self.selected_ent = None;
+          }
+        });
+        
         let mut ents = scene.world.iter().collect::<Vec<hecs::EntityRef>>();
         ents.sort_by(|a, b| {
           if a.entity().id() < b.entity().id() {
@@ -608,7 +615,14 @@ impl AssetTabViewer for SceneAssetTabViewer {
 
           for comp_type in sel_ent_comp_types {
             ui.collapsing(comp_type.name.clone(), |ui| {
-              (comp_type.ent_inspect)(&mut scene.world, selected_ent, ui);
+              if ui.button("-").clicked() {
+                is_modified = true;
+                (comp_type.ent_rem)(&mut scene.world, selected_ent);
+              }
+
+              if (comp_type.ent_inspect)(&mut scene.world, selected_ent, ui) {
+                is_modified = true;
+              }
             });
           }
 
