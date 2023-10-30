@@ -3,7 +3,8 @@ use wgpu::util::DeviceExt;
 pub struct IsoRenderer {
   pipeline: wgpu::RenderPipeline,
   buffer: wgpu::Buffer,
-  gbuffer: Gbuffer
+  gbuffer: Gbuffer,
+  base_pass_sprite_batcher: BasePassSpriteBatcher,
 }
 
 impl IsoRenderer {
@@ -86,7 +87,9 @@ impl IsoRenderer {
 
     let gbuffer = Gbuffer::new(device, output_format);
 
-    Self { pipeline, buffer, gbuffer }
+    let base_pass_sprite_batcher = BasePassSpriteBatcher::new(device);
+
+    Self { pipeline, buffer, gbuffer, base_pass_sprite_batcher }
   }
 
   pub fn render(&mut self, world: &hecs::World, device: &wgpu::Device, 
@@ -96,8 +99,9 @@ impl IsoRenderer {
     if let Some(scene_ent) = world.iter().find(|ent| ent.has::<SceneComp>()) {
       let scene_comp = scene_ent.get::<&SceneComp>().unwrap();
 
+      self.gbuffer.update_res(device, screen_size, scene_comp.pixel_scale);
+
       {
-        self.gbuffer.update_res(device, screen_size, scene_comp.pixel_scale);
         let mut render_pass = self.gbuffer.begin_scene_render_pass(encoder, scene_comp.background_color);
   
         let push_constants = PushConstants {
@@ -108,6 +112,18 @@ impl IsoRenderer {
         render_pass.set_vertex_buffer(0, self.buffer.slice(0..));
         render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, bytemuck::bytes_of(&push_constants));
         render_pass.draw(0..6, 0..25);
+
+        self.base_pass_sprite_batcher.reset();
+
+        let mut cube_query_borrow = world.query::<(&crate::TransformComp, 
+          &CubeComp)>();
+        for (ent, (transform, cube)) in cube_query_borrow.iter() {
+          let pixel_pos = transform.obj_to_pix(crate::math::Vec3f::default());
+          self.base_pass_sprite_batcher.add_batch(pixel_pos);
+        }
+
+        self.base_pass_sprite_batcher.render_batches(&mut render_pass, 
+          self.gbuffer.current_res())
       }
       
       self.gbuffer.perform_upscale(encoder, output_tex_view)
@@ -159,6 +175,15 @@ impl crate::editor::inspect::CompInspect for SceneComp {
       }
     });
     modified
+  }
+}
+
+#[derive(Default, serde::Deserialize, serde::Serialize, mac::Comp, Clone)]
+struct CubeComp;
+
+impl crate::editor::inspect::CompInspect for CubeComp {
+  fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
+    false
   }
 }
 
@@ -257,7 +282,7 @@ impl Gbuffer {
       upscale_pipeline_layout,
       target_res: Default::default(),
       upscale_pipeline,
-      upscale_sampler
+      upscale_sampler,
     }
   }
 
@@ -379,4 +404,110 @@ impl Gbuffer {
       crate::math::Vec2u::default()
     }
   }
+}
+
+struct BasePassSpriteBatch {
+  pixel_pos: crate::math::Vec2i,
+}
+
+struct BasePassSpriteBatcher {
+  batches: Vec<BasePassSpriteBatch>,
+  pipeline_layout: wgpu::PipelineLayout,
+  pipeline: wgpu::RenderPipeline,
+}
+
+impl BasePassSpriteBatcher {
+  fn new(device: &wgpu::Device) -> Self {
+    let pipeline_layout = device.create_pipeline_layout(
+      &wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[wgpu::PushConstantRange{
+          stages: wgpu::ShaderStages::VERTEX,
+          range: 
+            0..std::mem::size_of::<BasePassSpriteBatcherPushConstants>() as u32
+        }]
+      }
+    );
+
+    let shader_module = device.create_shader_module(
+      wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
+          include_str!("../ass/sprite_batch.wgsl")))
+      }
+    );
+
+    let pipeline = device.create_render_pipeline(
+      &wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+          module: &shader_module,
+          entry_point: "vs_main",
+          buffers: &[]
+        },
+        primitive: wgpu::PrimitiveState {
+          topology: wgpu::PrimitiveTopology::PointList,
+          strip_index_format: None,
+          front_face: wgpu::FrontFace::Cw,
+          cull_mode: None,
+          unclipped_depth: false,
+          polygon_mode: wgpu::PolygonMode::Point,
+          conservative: false
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState{
+          module: &shader_module,
+          entry_point: "fs_main",
+          targets: &[Some(wgpu::ColorTargetState {
+            format: wgpu::TextureFormat::Rgba16Float,
+            blend: None,
+            write_mask: wgpu::ColorWrites::all()
+          })],
+        }),
+        multiview: None
+      }
+    );
+
+    Self { 
+      batches: Vec::new(),
+      pipeline_layout,
+      pipeline,
+    }
+  }
+
+  fn add_batch(&mut self, pixel_pos: crate::math::Vec2i) {
+    self.batches.push(BasePassSpriteBatch {
+      pixel_pos
+    });
+  }
+
+  fn render_batches<'a, 'b>(&'a self, render_pass: &mut wgpu::RenderPass<'b>, 
+    gbuffer_size: crate::math::Vec2u) 
+    where 'a: 'b
+  {
+    render_pass.set_pipeline(&self.pipeline);
+    for batch in &self.batches {
+      let push = BasePassSpriteBatcherPushConstants {
+        pixel_pos: batch.pixel_pos,
+        gbuffer_size
+      };
+      render_pass.set_push_constants(wgpu::ShaderStages::VERTEX, 0, 
+        bytemuck::bytes_of(&push));
+      render_pass.draw(0..1, 0..1);
+    }
+  }
+
+  fn reset(&mut self) {
+    self.batches.clear();
+  }
+}
+
+#[derive(bytemuck::Pod, Copy, Clone, bytemuck::Zeroable)]
+#[repr(C)]
+struct BasePassSpriteBatcherPushConstants {
+  pixel_pos: crate::math::Vec2i,
+  gbuffer_size: crate::math::Vec2u
 }

@@ -1,7 +1,9 @@
 use std::ops::{DivAssign, MulAssign};
 
 /// A two-dimensional integer vector.
-#[derive(PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, serde::Serialize, serde::Deserialize, 
+  bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
 pub struct Vec2i {
   pub x : i32,
   pub y : i32
@@ -76,7 +78,8 @@ impl Into<winit::dpi::Position> for Vec2i {
   }
 }
 
-#[derive(bytemuck::NoUninit, Copy, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Copy, Clone, serde::Deserialize, 
+  serde::Serialize)]
 #[repr(C)]
 pub struct Vec2u {
   pub x : u32,
@@ -181,7 +184,7 @@ pub struct Vec3f {
 
 impl Vec3f {
   pub fn new(x: f32, y: f32, z: f32) -> Self {
-    Self{x: x, y: y, z: z}
+    Self{x, y, z}
   }
 }
 

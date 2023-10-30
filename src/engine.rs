@@ -155,7 +155,8 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
 
   let (device, queue) = pollster::block_on(adapter.request_device(
     &wgpu::DeviceDescriptor {
-      features: wgpu::Features::default() | wgpu::Features::PUSH_CONSTANTS,
+      features: wgpu::Features::default() | wgpu::Features::PUSH_CONSTANTS 
+        | wgpu::Features::POLYGON_MODE_POINT,
       limits,
       label: None,
     }, None
