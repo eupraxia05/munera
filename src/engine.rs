@@ -23,7 +23,7 @@ pub trait CompExt : Comp + crate::editor::inspect::CompInspect + Default
 /// implements a bunch of generic functions and stores them as function
 /// pointers. The `Comp` macro stores this for a component type, and they are
 /// iterable using `inventory::iter::<crate::engine::CompType>`.
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub struct CompType {
   /// The name of the component type.
   pub name: String,
@@ -55,9 +55,23 @@ pub struct CompType {
 impl CompType {
   pub fn new<T>(name: &str) -> Self
     where T: CompExt  {
-    Self { name: name.to_string(), type_id: std::any::TypeId::of::<T>(), ent_has: Self::ent_has::<T>, 
-      ent_add: Self::ent_add::<T>, ent_rem: Self::ent_rem::<T>, ent_get: Self::ent_get::<T>,
-      ent_deserialize: Self::ent_deserialize::<T>, ent_inspect: Self::ent_inspect::<T> }
+    Self { name: name.to_string(), type_id: std::any::TypeId::of::<T>(), 
+      ent_has: Self::ent_has::<T>, ent_add: Self::ent_add::<T>, 
+      ent_rem: Self::ent_rem::<T>, ent_get: Self::ent_get::<T>,
+      ent_deserialize: Self::ent_deserialize::<T>, 
+      ent_inspect: Self::ent_inspect::<T> }
+  }
+
+  /// Finds the CompType corresponding to a particular static type.
+  pub fn find<T>() -> Option<Self>
+    where T: CompExt
+  {
+    for comp_type in inventory::iter::<CompType>() {
+      if comp_type.type_id == std::any::TypeId::of::<T>() {
+        return Some(comp_type.clone());
+      }
+    }
+    None
   }
 
   fn ent_has<T>(ent: hecs::EntityRef) -> bool
@@ -91,10 +105,12 @@ impl CompType {
   fn ent_deserialize<T>(entity: &mut hecs::EntityBuilder, value: &Box<dyn Comp>) 
     where T: CompExt
   {
-    entity.add::<T>(value.as_ref().as_any().downcast_ref::<T>().unwrap().clone());
+    entity.add::<T>(value.as_ref().as_any().downcast_ref::<T>()
+      .unwrap().clone());
   }
 
-  fn ent_inspect<T>(world: &mut hecs::World, entity: hecs::Entity, ui: &mut egui::Ui) -> bool
+  fn ent_inspect<T>(world: &mut hecs::World, entity: hecs::Entity, 
+    ui: &mut egui::Ui) -> bool
     where T: CompExt
   {
     if let Ok(mut comp) = world.get::<&mut T>(entity) {
@@ -118,7 +134,8 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
   log::info!("Initializing engine...");
 
   let event_loop = winit::event_loop::EventLoop::new();
-  let window = winit::window::WindowBuilder::new().with_title("Munera").build(&event_loop).unwrap();
+  let window = winit::window::WindowBuilder::new().with_title("Munera")
+    .build(&event_loop).unwrap();
 
   let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
     backends: wgpu::Backends::VULKAN,
@@ -126,7 +143,8 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
   });
   let surface = unsafe { instance.create_surface(&window).unwrap() };
 
-  let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+  let adapter = pollster::block_on(instance.request_adapter(
+    &wgpu::RequestAdapterOptions {
     power_preference: wgpu::PowerPreference::HighPerformance,
     compatible_surface: Some(&surface),
     force_fallback_adapter: false
@@ -156,7 +174,8 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
   };
   surface.configure(&device, &surface_config);
 
-  let mut egui_winit_plat = egui_winit_platform::Platform::new(egui_winit_platform::PlatformDescriptor {
+  let mut egui_winit_plat = egui_winit_platform::Platform::new(
+    egui_winit_platform::PlatformDescriptor {
     physical_width: size.width as u32,
     physical_height: size.height as u32,
     scale_factor: window.scale_factor(),
@@ -164,7 +183,8 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
     style: Default::default()
   });
 
-  let mut egui_rpass = egui_wgpu_backend::RenderPass::new(&device, surface_format, 1);
+  let mut egui_rpass = egui_wgpu_backend::RenderPass::new(&device, 
+    surface_format, 1);
   
   let mut app = AppType::default();
   app.init(&window);
@@ -207,8 +227,8 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
           }
         };
 
-        let output_view = output_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
+        let output_view = output_frame.texture.create_view(
+          &wgpu::TextureViewDescriptor::default());
 
         app.tick(&mut AppTickInfo {
           dt: 0.0, 
@@ -228,9 +248,11 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
         });
 
         let full_output = egui_winit_plat.end_frame(Some(&window));
-        let paint_jobs = egui_winit_plat.context().tessellate(full_output.shapes);
+        let paint_jobs = egui_winit_plat.context()
+          .tessellate(full_output.shapes);
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut encoder = device.create_command_encoder(
+          &wgpu::CommandEncoderDescriptor {
           label: Some("encoder")
         });
 
@@ -243,9 +265,11 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
         egui_rpass.add_textures(&device, &queue, &full_output.textures_delta)
           .expect("Failed to add textures!");
 
-        egui_rpass.update_buffers(&device, &queue, &paint_jobs, &screen_descriptor);
+        egui_rpass.update_buffers(&device, &queue, &paint_jobs, 
+          &screen_descriptor);
 
-        egui_rpass.execute(&mut encoder, &output_view, &paint_jobs, &screen_descriptor, Some(wgpu::Color::BLACK))
+        egui_rpass.execute(&mut encoder, &output_view, &paint_jobs, 
+          &screen_descriptor, Some(wgpu::Color::BLACK))
           .expect("Failed to execute egui rendering!");
 
         queue.submit(std::iter::once(encoder.finish()));

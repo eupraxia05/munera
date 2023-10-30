@@ -61,7 +61,8 @@ impl std::fmt::Display for Error {
 #[cfg(test)]
 mod tests {
 
-  #[derive(mac::Comp, serde::Serialize, serde::Deserialize, Clone, Copy, Default)]
+  #[derive(mac::Comp, serde::Serialize, serde::Deserialize, Clone, Copy, 
+    Default)]
   struct FooComp {
 
   }
@@ -74,13 +75,8 @@ mod tests {
 
   #[test]
   fn comp_type_registration() {
-    let mut found_comp_type = false;
-    for comp_type in inventory::iter::<crate::engine::CompType>() {
-      if comp_type.type_id == std::any::TypeId::of::<FooComp>() {
-        found_comp_type = true;
-        break;
-      }
-    }
-    assert!(found_comp_type);
+    let comp_type = crate::engine::CompType::find::<FooComp>();
+    assert!(comp_type.is_some());
+    assert!(comp_type.unwrap().type_id == std::any::TypeId::of::<FooComp>())
   }
 }
