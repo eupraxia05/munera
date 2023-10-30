@@ -60,5 +60,27 @@ impl std::fmt::Display for Error {
 
 #[cfg(test)]
 mod tests {
-  
+
+  #[derive(mac::Comp, serde::Serialize, serde::Deserialize, Clone, Copy, Default)]
+  struct FooComp {
+
+  }
+
+  impl crate::editor::inspect::CompInspect for FooComp {
+    fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
+      false
+    }
+  }
+
+  #[test]
+  fn comp_type_registration() {
+    let mut found_comp_type = false;
+    for comp_type in inventory::iter::<crate::engine::CompType>() {
+      if comp_type.type_id == std::any::TypeId::of::<FooComp>() {
+        found_comp_type = true;
+        break;
+      }
+    }
+    assert!(found_comp_type);
+  }
 }

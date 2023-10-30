@@ -254,6 +254,11 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
 
         egui_rpass.remove_textures(full_output.textures_delta)
           .expect("Failed to remove textures!");
+
+        if app.should_quit() {
+          app.exit(&window);
+          control_flow.set_exit();
+        }
       }
       _ => ()
     }
@@ -280,4 +285,5 @@ pub trait App<'a>: Default {
   fn build_ui(&mut self, _build_ui_info: &AppBuildUiInfo) { }
   fn init(&mut self, _window: &winit::window::Window) { }
   fn exit(&mut self, _window: &winit::window::Window) { }
+  fn should_quit(&mut self) -> bool { false }
 }
