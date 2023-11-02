@@ -1,4 +1,23 @@
 t{
   "type": "SceneAsset",
-  "asset": {}
+  "asset": {
+    "4294967296": {
+      "comps": [
+        {
+          "type": "SceneComp",
+          "background_color": {
+            "r": 0.0,
+            "g": 0.0,
+            "b": 0.0,
+            "a": 0.0
+          },
+          "pixel_scale": 0
+        },
+        {
+          "type": "NameComp",
+          "name": "Scene"
+        }
+      ]
+    }
+  }
 }

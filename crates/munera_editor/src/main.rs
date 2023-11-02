@@ -248,7 +248,10 @@ impl<'a> Editor<'a> {
             let mut cache = asset_cache.borrow_mut();
             let ass = cache.borrow_asset_generic_mut(asset).unwrap().as_any().downcast_ref::<munera_core::SceneAsset>();
             let str = "t".to_string() + &serde_json::to_string_pretty(&munera_assets::AssetSerializeHelper::new(ass.unwrap())).unwrap();
-            std::fs::write(asset, str);
+            let path = self.project_dir.as_ref().unwrap().to_owned() + "/assets/" + asset;
+            if let Err(err) = std::fs::write(path.clone(), str) {
+              log::error!("Failed to save to {}: {}", path, err);
+            }
           }
           self.touched_assets.clear();
         }
