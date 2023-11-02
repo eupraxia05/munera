@@ -267,12 +267,25 @@ impl AssetCache {
 
   pub fn set_base_path(&mut self, base_path: &String) {
     self.base_path = base_path.clone();
+
+    log::info!("Setting asset base path to {}", self.base_path);
+
+    if let Ok(paths) = std::fs::read_dir(base_path) {
+      for path in paths {
+        let p = path.unwrap().file_name();
+        let name = p.to_str().unwrap().to_string();
+        if let Err(err) = self.load_file(&name) {
+          log::error!("Could not load {}: {}", name, err);
+        }
+      }
+    }
   }
 
   pub fn load_file(&mut self, name: &String) -> Result<()> {
     if !self.assets.contains_key(name) {
-      log::info!("Loading {}", name);
-      if let Ok(read) = fs::read(self.base_path.clone() + name) {
+      let path = self.base_path.clone() + "/" + name;
+      log::info!("Loading {}", path);
+      if let Ok(read) = fs::read(path.clone()) {
         if read[0] == b'b' {
           match serde_binary::decode::<AssetDeserializeHelper>(&read[1..], Endian::Little) {
             Ok(decode) => {
@@ -303,7 +316,7 @@ impl AssetCache {
         }
         
       } else {
-        return Err(Error::new(&format!("Failed to open {}", name)));
+        return Err(Error::new(&format!("Failed to open {}", path)));
       }
     }
     Ok(())

@@ -141,7 +141,7 @@ impl<'a> munera_core::engine::App<'a> for Editor<'a>
           self.save_data.as_mut().unwrap().recent_projects.push(path.clone());
           self.project_dir = Some(path.clone());
           self.project_dir_folder_picker = None;
-          build_ui_info.asset_cache.borrow_mut().set_base_path(&path);
+          build_ui_info.asset_cache.borrow_mut().set_base_path(&(path.clone() + "/assets/"));
           self.write_save_data();
         }
 
@@ -161,7 +161,7 @@ impl<'a> munera_core::engine::App<'a> for Editor<'a>
                   self.project_dir = Some(project.clone());
                   save_data.recent_projects.remove(idx);
                   save_data.recent_projects.insert(0, project.clone());
-                  build_ui_info.asset_cache.borrow_mut().set_base_path(&project);
+                  build_ui_info.asset_cache.borrow_mut().set_base_path(&(project.clone() + "/assets"));
                   needs_save = true;
                 }
                 if ui.button("-").clicked() {
@@ -478,8 +478,7 @@ impl Tool for AssetBrowserTool {
         let name = p.to_str().unwrap();
         let is_selected = self.selected_asset.is_some() && name == self.selected_asset.clone().unwrap();
         if ui.selectable_label(is_selected, name).clicked() {
-          let file_path = String::from("./assets/") + &String::from(name);
-          match DockTab::from_asset(&file_path, asset_cache) {
+          match DockTab::from_asset(&name.to_string(), asset_cache) {
             Ok(tab) => {
               dock.push_to_focused_leaf(tab);
             },
