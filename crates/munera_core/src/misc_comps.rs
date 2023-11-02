@@ -4,20 +4,20 @@ pub struct NameComp {
   pub name: String
 }
 
-impl crate::editor::inspect::CompInspect for NameComp {
+/*impl crate::editor::inspect::CompInspect for NameComp {
   fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
     crate::editor::inspect::inspect_string(&mut self.name, ui)
   }
-}
+}*/
 
 #[derive(munera_macros::Comp, Default, serde::Serialize, serde::Deserialize, Clone)]
 pub struct TransformComp {
-  pub position: crate::math::Vec3f
+  pub position: munera_math::Vec3f
 }
 
 impl TransformComp {
-  pub fn obj_to_pix(&self, obj_pos: crate::math::Vec3f) -> crate::math::Vec2i {
-    crate::math::Vec2i {
+  pub fn obj_to_pix(&self, obj_pos: munera_math::Vec3f) -> munera_math::Vec2i {
+    munera_math::Vec2i {
       x: ((self.position.x + obj_pos.x) * 32.0f32 
         + (self.position.y + obj_pos.y) * 32.0f32) as i32,
       y: ((self.position.x + obj_pos.x) * -16.0f32 
@@ -27,7 +27,7 @@ impl TransformComp {
   }
 }
 
-impl crate::editor::inspect::CompInspect for TransformComp {
+/*impl crate::editor::inspect::CompInspect for TransformComp {
   fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
     let mut modified = false;
     ui.horizontal(|ui| {
@@ -50,4 +50,4 @@ impl crate::editor::inspect::CompInspect for TransformComp {
     });
     modified
   }
-}
+}*/

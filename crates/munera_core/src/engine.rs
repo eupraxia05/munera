@@ -13,7 +13,7 @@ pub trait Comp: erased_serde::Serialize + std::marker::Sync + std::marker::Send
 }
 
 /// Exposes non-object-safe parts of the component interface. See `[Comp]`.
-pub trait CompExt : Comp + crate::editor::inspect::CompInspect + Default
+pub trait CompExt : Comp + Default
   + Clone + for<'de> serde::Deserialize<'de>
 {
 
@@ -114,7 +114,8 @@ impl CompType {
     where T: CompExt
   {
     if let Ok(mut comp) = world.get::<&mut T>(entity) {
-      comp.inspect(ui)
+      /*comp.inspect(ui)*/
+      false
     } else {
       false
     }
@@ -125,7 +126,7 @@ inventory::collect!(CompType);
 
 /// A context containing all engine systems, assets, and metadata.
 pub fn run<'a, AppType: App<'a> + 'static>() {
-  let asset_cache = std::cell::RefCell::new(crate::assets::AssetCache::new());
+  let asset_cache = std::cell::RefCell::new(munera_assets::AssetCache::new());
   
   log::set_logger(&crate::logger::LOGGER)
     .map(|()| log::set_max_level(log::LevelFilter::Info))
@@ -297,14 +298,14 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
 pub struct AppTickInfo<'a> {
   pub dt: f32,
   pub device: &'a wgpu::Device,
-  pub asset_cache: &'a std::cell::RefCell<crate::assets::AssetCache>,
+  pub asset_cache: &'a std::cell::RefCell<munera_assets::AssetCache>,
   pub egui_rpass: &'a mut egui_wgpu_backend::RenderPass,
   pub queue: &'a wgpu::Queue,
   pub output_tex_view: &'a wgpu::TextureView,
 }
 
 pub struct AppBuildUiInfo<'a> {
-  pub asset_cache: &'a std::cell::RefCell<crate::assets::AssetCache>,
+  pub asset_cache: &'a std::cell::RefCell<munera_assets::AssetCache>,
   pub egui_context: &'a egui::Context,
   pub device: &'a wgpu::Device,
 }

@@ -11,7 +11,7 @@ impl IsoRenderer {
   pub fn new(device: &wgpu::Device, output_format: wgpu::ColorTargetState) -> Self {
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: Some("triangle shader"),
-      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../assets/shader.wgsl")))
+      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../content/shader.wgsl")))
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor{
@@ -25,16 +25,16 @@ impl IsoRenderer {
 
     let mut tiles = Vec::new();
     tiles.resize(25, InstanceData { 
-      position: crate::math::Vec3f::new(0.0, 0.0, 0.0),
+      position: munera_math::Vec3f::new(0.0, 0.0, 0.0),
       _padding: 0.0,
-      color: crate::math::Color::new(0.0, 0.0, 0.0, 0.0)
+      color: munera_math::Color::new(0.0, 0.0, 0.0, 0.0)
     });
 
     for i in 0..5 {
       for j in 0..5 {
         let tile = tiles.get_mut(i + j * 5).unwrap();
-        tile.position = crate::math::Vec3f::new(i as f32 - 2.0f32, j as f32 - 2.0f32, 0.0);
-        tile.color = crate::math::Color::new(i as f32 / 4.0, j as f32 / 4.0, 0.0, 1.0);
+        tile.position = munera_math::Vec3f::new(i as f32 - 2.0f32, j as f32 - 2.0f32, 0.0);
+        tile.color = munera_math::Color::new(i as f32 / 4.0, j as f32 / 4.0, 0.0, 1.0);
       }
     }
 
@@ -94,7 +94,7 @@ impl IsoRenderer {
 
   pub fn render(&mut self, world: &hecs::World, device: &wgpu::Device, 
     encoder: &mut wgpu::CommandEncoder, output_tex_view: &wgpu::TextureView,
-    screen_size: crate::math::Vec2u) 
+    screen_size: munera_math::Vec2u) 
   {
     if let Some(scene_ent) = world.iter().find(|ent| ent.has::<SceneComp>()) {
       let scene_comp = scene_ent.get::<&SceneComp>().unwrap();
@@ -118,7 +118,7 @@ impl IsoRenderer {
         let mut cube_query_borrow = world.query::<(&crate::TransformComp, 
           &CubeComp)>();
         for (ent, (transform, cube)) in cube_query_borrow.iter() {
-          let pixel_pos = transform.obj_to_pix(crate::math::Vec3f::default());
+          let pixel_pos = transform.obj_to_pix(munera_math::Vec3f::default());
           self.base_pass_sprite_batcher.add_batch(pixel_pos);
         }
 
@@ -134,26 +134,26 @@ impl IsoRenderer {
 #[derive(bytemuck::NoUninit, Clone, Copy)]
 #[repr(C)]
 struct PushConstants {
-  screen_size: crate::math::Vec2u
+  screen_size: munera_math::Vec2u
 }
 
 #[derive(bytemuck::NoUninit, Clone, Copy)]
 #[repr(C)]
 struct InstanceData {
-  position: crate::math::Vec3f,
+  position: munera_math::Vec3f,
   _padding: f32,
-  color: crate::math::Color
+  color: munera_math::Color
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, munera_macros::Comp, RTTI, Clone)]
+#[derive(Default, serde::Serialize, serde::Deserialize, munera_macros::Comp, Clone)]
 struct SceneComp {
-  background_color: crate::math::Color,
+  background_color: munera_math::Color,
 
   #[serde(default)]
   pixel_scale: u32
 }
 
-impl crate::editor::inspect::CompInspect for SceneComp {
+/*impl crate::editor::inspect::CompInspect for SceneComp {
   fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
     let mut modified = false;
     ui.horizontal(|ui| {
@@ -176,16 +176,16 @@ impl crate::editor::inspect::CompInspect for SceneComp {
     });
     modified
   }
-}
+}*/
 
 #[derive(Default, serde::Deserialize, serde::Serialize, munera_macros::Comp, Clone)]
 struct CubeComp;
 
-impl crate::editor::inspect::CompInspect for CubeComp {
+/*impl crate::editor::inspect::CompInspect for CubeComp {
   fn inspect(&mut self, ui: &mut egui::Ui) -> bool {
     false
   }
-}
+}*/
 
 struct Gbuffer {
   texture: Option<wgpu::Texture>,
@@ -193,7 +193,7 @@ struct Gbuffer {
   bind_group_layout: wgpu::BindGroupLayout,
   bind_group: Option<wgpu::BindGroup>,
   upscale_pipeline_layout: wgpu::PipelineLayout,
-  target_res: crate::math::Vec2u,
+  target_res: munera_math::Vec2u,
   upscale_pipeline: wgpu::RenderPipeline,
   upscale_sampler: wgpu::Sampler,
 }
@@ -229,7 +229,7 @@ impl Gbuffer {
 
     let upscale_shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: None,
-      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../assets/upscale_shader.wgsl"))),
+      source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!("../content/upscale_shader.wgsl"))),
     });
 
     let upscale_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -286,7 +286,7 @@ impl Gbuffer {
     }
   }
 
-  fn update_res(&mut self, device: &wgpu::Device, target_res: crate::math::Vec2u, mut pixel_scale: u32) {
+  fn update_res(&mut self, device: &wgpu::Device, target_res: munera_math::Vec2u, mut pixel_scale: u32) {
     assert!(self.texture.is_some() == self.texture_view.is_some() 
       && self.texture.is_some() == self.bind_group.is_some());
     
@@ -299,7 +299,7 @@ impl Gbuffer {
       true 
     } else {
       let tex = self.texture.as_ref().unwrap();
-      let tex_size = crate::math::Vec2u::new(tex.width(), tex.height());
+      let tex_size = munera_math::Vec2u::new(tex.width(), tex.height());
       tex_size != scaled_res
     };
 
@@ -358,7 +358,7 @@ impl Gbuffer {
     }));
   }
 
-  fn begin_scene_render_pass<'a, 'b>(&'b self, encoder: &'a mut wgpu::CommandEncoder, clear_color: crate::math::Color)
+  fn begin_scene_render_pass<'a, 'b>(&'b self, encoder: &'a mut wgpu::CommandEncoder, clear_color: munera_math::Color)
     -> wgpu::RenderPass<'a>
     where 'b: 'a
   {
@@ -397,17 +397,17 @@ impl Gbuffer {
     rpass.draw(0..6, 0..1);
   }
 
-  fn current_res(&self) -> crate::math::Vec2u {
+  fn current_res(&self) -> munera_math::Vec2u {
     if let Some(tex) = self.texture.as_ref() {
-      crate::math::Vec2u::new(tex.width(), tex.height())
+      munera_math::Vec2u::new(tex.width(), tex.height())
     } else {
-      crate::math::Vec2u::default()
+      munera_math::Vec2u::default()
     }
   }
 }
 
 struct BasePassSpriteBatch {
-  pixel_pos: crate::math::Vec2i,
+  pixel_pos: munera_math::Vec2i,
 }
 
 struct BasePassSpriteBatcher {
@@ -434,7 +434,7 @@ impl BasePassSpriteBatcher {
       wgpu::ShaderModuleDescriptor {
         label: None,
         source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
-          include_str!("../assets/sprite_batch.wgsl")))
+          include_str!("../content/sprite_batch.wgsl")))
       }
     );
 
@@ -478,14 +478,14 @@ impl BasePassSpriteBatcher {
     }
   }
 
-  fn add_batch(&mut self, pixel_pos: crate::math::Vec2i) {
+  fn add_batch(&mut self, pixel_pos: munera_math::Vec2i) {
     self.batches.push(BasePassSpriteBatch {
       pixel_pos
     });
   }
 
   fn render_batches<'a, 'b>(&'a self, render_pass: &mut wgpu::RenderPass<'b>, 
-    gbuffer_size: crate::math::Vec2u) 
+    gbuffer_size: munera_math::Vec2u) 
     where 'a: 'b
   {
     render_pass.set_pipeline(&self.pipeline);
@@ -508,6 +508,6 @@ impl BasePassSpriteBatcher {
 #[derive(bytemuck::Pod, Copy, Clone, bytemuck::Zeroable)]
 #[repr(C)]
 struct BasePassSpriteBatcherPushConstants {
-  pixel_pos: crate::math::Vec2i,
-  gbuffer_size: crate::math::Vec2u
+  pixel_pos: munera_math::Vec2i,
+  gbuffer_size: munera_math::Vec2u
 }

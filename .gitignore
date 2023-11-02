@@ -1,5 +1,3 @@
-debug/
-target/
-mac/debug/
-mac/target/
+**/debug/
+**/target/
 **/Cargo.lock

@@ -34,31 +34,25 @@ pub fn comp(item: TokenStream) -> TokenStream
   result.push_str("}");
   result.push_str(format!("impl crate::engine::CompExt for {} {{", name).as_str());
   result.push_str("}");
-
-  /*result.push_str("fn ent_ser<S>(ent: EntityRef, map: S) -> Result<(), S::Error> where S: SerializeMap { ");
-  result.push_str("map.serialize_entry(\"");
-  result = result + &name;
-  result.push_str("\", &*ent.get::<&");
-  result = result + &name;
-  result.push_str(">().expect(\"Failed to get component!\"))");
-  result.push_str(" }");*/
   result.push_str(format!("inventory::submit! {{ crate::engine::CompType::new::<{}>(\"{}\") }}", name, name).as_str());
 
   result.parse().unwrap()
 }
 
-#[proc_macro]
-pub fn define_comps(_: TokenStream) -> TokenStream {
-  let mut result = String::from("vec![");
-  if let Some(types) = COMP_TYPES.lock().unwrap().as_mut() {
-    for ty in types {
-      result.push_str("CompType::new::<");
-      result = result + ty;
-      result.push_str(">(\"");
-      result = result + ty;
-      result.push_str("\"), ")
-    }
-  }
-  result.push_str("]");
+#[proc_macro_derive(Asset)]
+pub fn asset(item: TokenStream) -> TokenStream {
+  let DeriveInput {ident, data, ..} = parse_macro_input!(item as DeriveInput);
+
+  let name = ident.to_string();
+
+  let mut result = String::new();
+  result.push_str(format!("impl munera_assets::Asset for {} {{", name).as_str());
+  result.push_str("fn as_any(&self) -> &dyn std::any::Any { self }");
+  result.push_str("fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }");
+  result.push_str("}");
+  result.push_str(format!("impl munera_assets::AssetExt for {} {{", name).as_str());
+  result.push_str(format!("fn asset_type_name() -> &'static str {{ \"{}\" }}", name).as_str());
+  result.push_str("}");
+  result.push_str(format!("inventory::submit! {{ munera_assets::AssetType::new::<{}>() }}", name).as_str());
   result.parse().unwrap()
 }

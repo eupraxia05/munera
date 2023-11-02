@@ -1,0 +1,28 @@
+[package]
+name = "munera_editor"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "munera_editor"
+path = "src/main.rs"
+
+[dependencies]
+munera_foundation = { path = "../munera_foundation" }
+munera_core = { path = "../munera_core" }
+munera_assets = { path = "../munera_assets" }
+munera_math = { path = "../munera_math" }
+egui = "0.23"
+egui_dock = { git = "https://github.com/eupraxia05/egui_dock.git", branch = "iter-nodes-mut"  }
+egui_wgpu_backend = "0.26.0"
+wgpu = "0.17.1"
+egui_extras = { version = "0.23.0", features = ["image"] }
+winit = "0.28.7"
+directories = "5.0.1"
+serde_json = "1.0.106"
+log = "0.4.20"
+tinyfiledialogs = "3.0"
+image = { version = "0.24.7", default-features = false, features = ["png", "jpeg", "bmp"] }
+serde-binary = "0.5.0"
+serde = { version = "1.0.188", features = ["derive"] }
+egui_file = "0.11.0"

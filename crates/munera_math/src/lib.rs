@@ -196,7 +196,6 @@ impl Default for Vec3f {
 
 #[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
-#[derive(RTTI)]
 pub struct Color {
   pub r: f32,
   pub g: f32,
