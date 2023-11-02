@@ -142,6 +142,7 @@ impl<'a> munera_core::engine::App<'a> for Editor<'a>
           self.project_dir = Some(path.clone());
           self.project_dir_folder_picker = None;
           build_ui_info.asset_cache.borrow_mut().set_base_path(&path);
+          self.write_save_data();
         }
 
         egui::Window::new("Recent Projects")
@@ -150,17 +151,28 @@ impl<'a> munera_core::engine::App<'a> for Editor<'a>
           .resizable(false)
           .show(build_ui_info.egui_context, |ui| 
         {
+          let mut needs_save = false;
           if let Some(save_data) = self.save_data.as_mut() {
             let recents = save_data.recent_projects.clone();
             for (idx, project) in recents.iter().enumerate() 
             {
-              if ui.button(project).clicked() {
-                self.project_dir = Some(project.clone());
-                save_data.recent_projects.remove(idx);
-                save_data.recent_projects.insert(0, project.clone());
-                build_ui_info.asset_cache.borrow_mut().set_base_path(&project);
-              }
+              ui.horizontal(|ui| {
+                if ui.button(project).clicked() {
+                  self.project_dir = Some(project.clone());
+                  save_data.recent_projects.remove(idx);
+                  save_data.recent_projects.insert(0, project.clone());
+                  build_ui_info.asset_cache.borrow_mut().set_base_path(&project);
+                  needs_save = true;
+                }
+                if ui.button("-").clicked() {
+                  save_data.recent_projects.remove(idx);
+                }
+              });
             }
+          }
+
+          if needs_save {
+            self.write_save_data();
           }
         });
       }
@@ -189,15 +201,10 @@ impl<'a> munera_core::engine::App<'a> for Editor<'a>
   }
 
   fn exit(&mut self, window: &winit::window::Window) {
-    if let Some(base_dirs) = directories::BaseDirs::new() {
-      let path = String::from(base_dirs.cache_dir().to_str().unwrap()) + "/Munera";
-      std::fs::create_dir_all(&path);
-      let save_data = self.save_data.as_mut().unwrap();
-      save_data.window_pos = window.outer_position().unwrap().into();
-      save_data.window_size = window.inner_size().into();
-      let ser = serde_json::to_string_pretty(&save_data).unwrap();
-      std::fs::write(path + "/editor.json", &ser);
-    }
+    let save_data = self.save_data.as_mut().unwrap();
+    save_data.window_pos = window.outer_position().unwrap().into();
+    save_data.window_size = window.inner_size().into();
+    self.write_save_data(); 
   }
 }
 
@@ -342,6 +349,15 @@ impl<'a> Editor<'a> {
       egui_dock::DockArea::new(&mut self.dock).style(egui_dock::Style::from_egui(ctx.style().as_ref()))
         .show_inside(ui, &mut viewer);
     });
+  }
+
+  fn write_save_data(&self) {
+    if let Some(base_dirs) = directories::BaseDirs::new() {
+      let path = String::from(base_dirs.cache_dir().to_str().unwrap()) + "/Munera";
+      std::fs::create_dir_all(&path);
+      let ser = serde_json::to_string_pretty(&self.save_data.as_ref().unwrap()).unwrap();
+      std::fs::write(path + "/editor.json", &ser);
+    }
   }
 }
 
