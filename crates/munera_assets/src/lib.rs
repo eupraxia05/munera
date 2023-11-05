@@ -404,7 +404,6 @@ impl<'de> serde::de::Visitor<'de> for AssetDeserializeHelperVisitor {
         },
         "asset" => {
           asset_value = Some(value);
-          log::info!("lol and lmao");
         },
         &_ => { }
       }

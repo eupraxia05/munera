@@ -1,5 +1,6 @@
 /// Utility component to tag entities with a human-friendly name.
-#[derive(munera_macros::Comp, serde::Serialize, serde::Deserialize, Default, Clone)]
+#[derive(munera_macros::Comp, serde::Serialize, serde::Deserialize, Default, 
+  Clone)]
 pub struct NameComp {
   pub name: String
 }
@@ -10,7 +11,8 @@ pub struct NameComp {
   }
 }*/
 
-#[derive(munera_macros::Comp, Default, serde::Serialize, serde::Deserialize, Clone)]
+#[derive(munera_macros::Comp, Default, serde::Serialize, serde::Deserialize, 
+  Clone)]
 pub struct TransformComp {
   pub position: munera_math::Vec3f
 }

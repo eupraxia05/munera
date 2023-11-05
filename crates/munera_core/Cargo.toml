@@ -41,6 +41,7 @@ erased-serde = "0.3.31"
 typetag = "0.2.13"
 munera_assets = { path = "../munera_assets" }
 munera_math = { path = "../munera_math" }
+munera_foundation = { path = "../munera_foundation" }
 
 [build-dependencies]
 munera_assets = { path = "../munera_assets" }

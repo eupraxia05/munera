@@ -7,3 +7,7 @@ edition = "2021"
 name = "munera_foundation"
 path = "src/lib.rs"
 type = ["rlib"]
+
+[dependencies]
+egui = "0.23.0"
+munera_math = { path = "../munera_math" }

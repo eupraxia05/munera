@@ -145,7 +145,8 @@ struct InstanceData {
   color: munera_math::Color
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, munera_macros::Comp, Clone)]
+#[derive(Default, serde::Serialize, serde::Deserialize, munera_macros::Comp, 
+  Clone, rtti_derive::RTTI)]
 struct SceneComp {
   background_color: munera_math::Color,
 
@@ -178,8 +179,11 @@ struct SceneComp {
   }
 }*/
 
-#[derive(Default, serde::Deserialize, serde::Serialize, munera_macros::Comp, Clone)]
-struct CubeComp;
+#[derive(Default, serde::Deserialize, serde::Serialize, munera_macros::Comp, 
+  Clone, rtti_derive::RTTI)]
+struct CubeComp {
+
+}
 
 /*impl crate::editor::inspect::CompInspect for CubeComp {
   fn inspect(&mut self, ui: &mut egui::Ui) -> bool {

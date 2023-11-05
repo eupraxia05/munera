@@ -15,9 +15,9 @@ lazy_static! {
 #[proc_macro_derive(Comp)]
 pub fn comp(item: TokenStream) -> TokenStream
 {
-  let DeriveInput { ident, data, .. } = parse_macro_input!(item as DeriveInput);
+  let derive_input = parse_macro_input!(item as DeriveInput);
 
-  let name = ident.to_string();
+  let name = derive_input.ident.to_string();
 
   if let Some(types) = COMP_TYPES.lock().unwrap().as_mut() {
     types.push(name.clone());
@@ -34,6 +34,23 @@ pub fn comp(item: TokenStream) -> TokenStream
   result.push_str("}");
   result.push_str(format!("impl crate::engine::CompExt for {} {{", name).as_str());
   result.push_str("}");
+  result.push_str(format!("impl crate::engine::CompInspect for {} {{", name).as_str());
+  result.push_str("fn inspect(&mut self, ui: &mut egui::Ui) -> bool {");
+  match derive_input.data {
+    syn::Data::Struct(data) => {
+      for field in data.fields {
+        let name = field.ident.as_ref().unwrap().to_string();
+        result.push_str("ui.horizontal(|ui| {");
+        result.push_str(format!("ui.label(\"{}\");", name).as_str());
+        result.push_str(format!("munera_foundation::PropertyInspect::inspect(&mut self.{}, ui);", name).as_str());
+        result.push_str("});");
+      }
+    }
+    _ => {
+      panic!("Unsupported CompType type!");
+    }
+  }
+  result.push_str("false } }");
   result.push_str(format!("inventory::submit! {{ crate::engine::CompType::new::<{}>(\"{}\") }}", name, name).as_str());
 
   result.parse().unwrap()

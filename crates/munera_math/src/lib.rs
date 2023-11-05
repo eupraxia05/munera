@@ -174,7 +174,8 @@ impl Vec2f {
   }
 }
 
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod, serde::Serialize, 
+  serde::Deserialize, rtti_derive::RTTI)]
 #[repr(C)]
 pub struct Vec3f {
   pub x: f32,
@@ -194,7 +195,8 @@ impl Default for Vec3f {
   }
 }
 
-#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod, serde::Serialize, 
+  serde::Deserialize, rtti_derive::RTTI)]
 #[repr(C)]
 pub struct Color {
   pub r: f32,

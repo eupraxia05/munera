@@ -13,10 +13,14 @@ pub trait Comp: erased_serde::Serialize + std::marker::Sync + std::marker::Send
 }
 
 /// Exposes non-object-safe parts of the component interface. See `[Comp]`.
-pub trait CompExt : Comp + Default
-  + Clone + for<'de> serde::Deserialize<'de>
+pub trait CompExt : Comp + Default + Clone + for<'de> serde::Deserialize<'de>
+  + CompInspect
 {
 
+}
+
+pub trait CompInspect {
+  fn inspect(&mut self, ui: &mut egui::Ui) -> bool;
 }
 
 /// Contains metadata defined for a particular component type. Privately, this
@@ -114,7 +118,7 @@ impl CompType {
     where T: CompExt
   {
     if let Ok(mut comp) = world.get::<&mut T>(entity) {
-      /*comp.inspect(ui)*/
+      comp.inspect(ui);
       false
     } else {
       false

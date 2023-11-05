@@ -36,7 +36,7 @@ use rtti::RTTI;
 mod tests {
 
   #[derive(munera_macros::Comp, serde::Serialize, serde::Deserialize, Clone, Copy, 
-    Default)]
+    Default, rtti_derive::RTTI)]
   struct FooComp {
 
   }

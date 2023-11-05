@@ -6,16 +6,35 @@ t{
         {
           "type": "SceneComp",
           "background_color": {
-            "r": 0.0,
-            "g": 0.0,
-            "b": 0.0,
-            "a": 0.0
+            "r": 0.0052828914,
+            "g": 0.0079470435,
+            "b": 0.00370862,
+            "a": 1.0
           },
-          "pixel_scale": 0
+          "pixel_scale": 2
         },
         {
           "type": "NameComp",
           "name": "Scene"
+        }
+      ]
+    },
+    "4294967297": {
+      "comps": [
+        {
+          "type": "CubeComp"
+        },
+        {
+          "type": "TransformComp",
+          "position": {
+            "x": 0.5,
+            "y": 1.2,
+            "z": 0.0
+          }
+        },
+        {
+          "type": "NameComp",
+          "name": "Object"
         }
       ]
     }
