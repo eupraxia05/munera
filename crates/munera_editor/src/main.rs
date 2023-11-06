@@ -255,6 +255,9 @@ impl<'a> Editor<'a> {
           }
           self.touched_assets.clear();
         }
+        if ui.button("Save Asset Blob").clicked() {
+          std::fs::write("./assets.blob", asset_cache.borrow().encode_blob());
+        }
       });
       ui.menu_button("Project", |ui| {
         let _ = ui.button("Project Settings");

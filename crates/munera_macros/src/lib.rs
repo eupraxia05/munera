@@ -66,6 +66,7 @@ pub fn asset(item: TokenStream) -> TokenStream {
   result.push_str(format!("impl munera_assets::Asset for {} {{", name).as_str());
   result.push_str("fn as_any(&self) -> &dyn std::any::Any { self }");
   result.push_str("fn as_any_mut(&mut self) -> &mut dyn std::any::Any { self }");
+  result.push_str(format!("fn get_asset_type(&self) -> munera_assets::AssetType {{ munera_assets::AssetType::new::<{}>() }}", name).as_str());
   result.push_str("}");
   result.push_str(format!("impl munera_assets::AssetExt for {} {{", name).as_str());
   result.push_str(format!("fn asset_type_name() -> &'static str {{ \"{}\" }}", name).as_str());

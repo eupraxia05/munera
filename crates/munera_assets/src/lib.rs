@@ -35,6 +35,7 @@ pub trait Asset : serde_binary::Encode + serde_binary::Decode + Any
 {
   fn as_any(&self) -> &dyn Any;
   fn as_any_mut(&mut self) -> &mut dyn Any;
+  fn get_asset_type(&self) -> AssetType;
 }
 
 pub trait AssetExt : Asset + Default 
@@ -57,6 +58,7 @@ pub struct AssetType {
   name: &'static str,
   create_default_fn: fn() -> Box<dyn Asset>,
   from_value_fn: fn(serde_json::Value) -> Box<dyn Asset>,
+  encode_fn: fn(&dyn Asset) -> Vec<u8>
 }
 
 impl AssetType {
@@ -67,7 +69,8 @@ impl AssetType {
       type_id: std::any::TypeId::of::<T>(),
       name: T::asset_type_name(),
       create_default_fn: Self::impl_create_default_fn::<T>,
-      from_value_fn: Self::impl_from_value_fn::<T>
+      from_value_fn: Self::impl_from_value_fn::<T>,
+      encode_fn: Self::impl_encode_fn::<T>,
     }
   }
 
@@ -93,6 +96,17 @@ impl AssetType {
     None
   }
 
+  fn find_by_type_id(type_id: &std::any::TypeId) -> Option<Self> {
+    for asset_type in inventory::iter::<AssetType>() {
+      log::info!("{}", asset_type.name);
+      if asset_type.type_id == *type_id {
+        return Some(asset_type.clone());
+      }
+    }
+    
+    None
+  }
+
   fn impl_create_default_fn<T>() -> Box<dyn Asset>
     where T: AssetExt
   {
@@ -103,6 +117,13 @@ impl AssetType {
     where T: AssetExt
   {
     Box::new(serde_json::from_value::<T>(value).unwrap())
+  }
+
+  fn impl_encode_fn<T>(asset: &dyn Asset) -> Vec<u8> 
+    where T: AssetExt
+  {
+    serde_binary::to_vec(asset.as_any().downcast_ref::<T>().unwrap(), 
+      serde_binary::binary_stream::Endian::Little).unwrap()
   }
 }
 
@@ -322,6 +343,11 @@ impl AssetCache {
     Ok(())
   }
 
+  pub fn encode_blob(&self) -> Vec<u8> {
+    serde_binary::to_vec(&BlobEncodeHelper::new(self), 
+      serde_binary::binary_stream::Endian::Little).unwrap()
+  }
+
   pub fn borrow_asset<AssetType>(&self, name: &String) -> Option<&AssetType>
     where AssetType: Asset 
   {
@@ -467,6 +493,33 @@ impl<'a, AssetType> serde::Serialize for AssetSerializeHelper<'a, AssetType>
     let mut map = serializer.serialize_map(None)?;
     map.serialize_entry("type", AssetType::asset_type_name());
     map.serialize_entry("asset", self.asset);
+    map.end()
+  }
+}
+
+struct BlobEncodeHelper<'a> {
+  asset_cache: &'a AssetCache
+}
+
+impl<'a> BlobEncodeHelper<'a> {
+  fn new(asset_cache: &'a AssetCache) -> Self {
+    Self { asset_cache }
+  }
+}
+
+impl<'a> serde::Serialize for BlobEncodeHelper<'a> {
+  fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where S: serde::Serializer 
+  {
+    use serde::ser::SerializeMap;
+
+    let mut map = serializer.serialize_map(None)?;
+
+    for (key, asset) in &self.asset_cache.assets {
+      let asset_type = asset.get_asset_type();
+      map.serialize_entry(key, &(asset_type.encode_fn)(&**asset))?;
+    }
+
     map.end()
   }
 }
