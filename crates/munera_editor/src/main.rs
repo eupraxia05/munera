@@ -191,11 +191,19 @@ impl<'a> munera_core::engine::App<'a> for Editor<'a>
   fn init(&mut self, window: &winit::window::Window) {
     if let Some(base_dirs) = directories::BaseDirs::new() {
       let path = String::from(base_dirs.cache_dir().to_str().unwrap()) + "/Munera/editor.json";
-      if let Ok(read) = std::fs::read(path) {
+      if let Ok(read) = std::fs::read(path.clone()) {
+        log::info!("Reading save data from {}...", path);
         let save_data = serde_json::from_str::<EditorSaveData>(String::from_utf8(read).unwrap().as_str()).unwrap();
         window.set_outer_position::<winit::dpi::Position>(save_data.window_pos.into());
         window.set_inner_size::<winit::dpi::Size>(save_data.window_size.into());
         self.save_data = Some(save_data);
+      }
+      else {
+        log::info!("No save data found, creating new...");
+        self.save_data = Some(EditorSaveData { 
+          window_pos: window.inner_position().unwrap().into(), 
+          window_size: window.inner_size().into(), 
+          recent_projects: vec![] })
       }
     }
   }

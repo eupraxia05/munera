@@ -140,11 +140,14 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
 
   let event_loop = winit::event_loop::EventLoop::new();
   let window = winit::window::WindowBuilder::new().with_title("Munera")
+    .with_inner_size(winit::dpi::LogicalSize::new(1280, 720))
     .build(&event_loop).unwrap();
 
   let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
     backends: wgpu::Backends::VULKAN,
-    dx12_shader_compiler: wgpu::Dx12Compiler::Fxc
+    dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
+    flags: wgpu::InstanceFlags::DEBUG | wgpu::InstanceFlags::VALIDATION,
+    gles_minor_version: wgpu::Gles3MinorVersion::Automatic
   });
   let surface = unsafe { instance.create_surface(&window).unwrap() };
 
@@ -167,12 +170,17 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
     }, None
   )).unwrap();
 
+  let adapter_info = adapter.get_info();
+
+  log::info!("Selected adapter: {}", adapter_info.name);
+
   device.on_uncaptured_error(Box::new(|error| {
     log::error!("{}", error);
   }));
 
   let size = window.inner_size();
-  let surface_format = surface.get_capabilities(&adapter).formats[0];
+  let surface_capabilities = surface.get_capabilities(&adapter);
+  let surface_format = surface_capabilities.formats[0];
   let mut surface_config = wgpu::SurfaceConfiguration {
     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
     format: surface_format,
@@ -183,6 +191,7 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
     view_formats: vec![]
   };
   surface.configure(&device, &surface_config);
+  let mut surface_needs_resize = false;
 
   let mut egui_winit_plat = egui_winit_platform::Platform::new(
     egui_winit_platform::PlatformDescriptor {
@@ -217,13 +226,18 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
             if size.width > 0 && size.height > 0 {
               surface_config.width = size.width;
               surface_config.height = size.height;
-              surface.configure(&device, &surface_config);
+              surface_needs_resize = true;
             }
           }
           _ => ()
         }
       },
       winit::event::Event::MainEventsCleared => {
+        if surface_needs_resize {
+          surface.configure(&device, &surface_config);
+          surface_needs_resize = false;
+        }
+
         egui_winit_plat.update_time(start_time.elapsed().as_secs_f64());
 
         let output_frame = match surface.get_current_texture() {

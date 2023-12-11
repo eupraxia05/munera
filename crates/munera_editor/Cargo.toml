@@ -14,8 +14,8 @@ munera_assets = { path = "../munera_assets" }
 munera_math = { path = "../munera_math" }
 egui = "0.23"
 egui_dock = { git = "https://github.com/eupraxia05/egui_dock.git", branch = "iter-nodes-mut"  }
-egui_wgpu_backend = "0.26.0"
-wgpu = "0.17.1"
+egui_wgpu_backend = "0.27.0"
+wgpu = "0.18"
 egui_extras = { version = "0.23.0", features = ["image"] }
 winit = "0.28.7"
 directories = "5.0.1"

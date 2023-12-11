@@ -14,7 +14,7 @@ serde = { version = "1.0.188", features = ["derive"] }
 winit = "0.28.7"
 num-traits = "0.2.17"
 egui = "0.23"
-wgpu = "0.17.1"
+wgpu = "0.18"
 serde_repr = "0.1.16"
 rtti = "0.4.0"
 rtti-derive = "0.4.0"
