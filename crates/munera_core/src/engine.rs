@@ -141,6 +141,7 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
   let event_loop = winit::event_loop::EventLoop::new();
   let window = winit::window::WindowBuilder::new().with_title("Munera")
     .with_inner_size(winit::dpi::LogicalSize::new(1280, 720))
+    .with_visible(false)
     .build(&event_loop).unwrap();
 
   let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -303,7 +304,12 @@ pub fn run<'a, AppType: App<'a> + 'static>() {
         egui_rpass.remove_textures(full_output.textures_delta)
           .expect("Failed to remove textures!");
 
+        if !window.is_visible().unwrap_or(true) {
+          window.set_visible(true);
+        }
+
         if app.should_quit() {
+          window.set_visible(false);
           app.exit(&window);
           control_flow.set_exit();
         }
