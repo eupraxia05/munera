@@ -1,0 +1,6 @@
+[workspace]
+resolver = "3"
+members = [ "iso","munera"]
+
+[workspace.dependencies]
+bevy = "0.16"
