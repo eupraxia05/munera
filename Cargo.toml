@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = [ "iso","munera"]
+members = [ "debug", "iso","munera", "ref_exporter"]
 
 [workspace.dependencies]
 bevy = { version = "0.16", features = [] }

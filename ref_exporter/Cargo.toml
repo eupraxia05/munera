@@ -1,13 +1,9 @@
 [package]
-name = "iso"
+name = "ref_exporter"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 bevy = { workspace = true }
-bevy_ecs_tilemap = "0.16.0"
-bevy_egui = "0.35.1"
-bevy_sprite3d = "5.0.0"
-
-[dev-dependencies]
+iso = { path = "../iso/" }
 debug = { path = "../debug" }

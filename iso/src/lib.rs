@@ -15,6 +15,8 @@ impl Plugin for IsoPlugin {
         app.add_systems(Update, handle_added_characters);
         app.add_systems(Update, handle_added_iso_cameras);
         app.add_systems(Update, handle_added_terrains);
+        app.add_systems(Update, handle_added_ref_cameras);
+        app.add_systems(Update, handle_added_ref_characters);
 
         app.insert_resource(TerrainTexture::default());
 
@@ -33,10 +35,15 @@ pub struct IsoCharacter;
 pub struct IsoCamera;
 
 #[derive(Component, Reflect)]
-pub struct Terrain;
+pub struct Terrain {
+    pub texture: Handle<Image>
+}
 
 #[derive(Component, Reflect)]
 pub struct RefCamera;
+
+#[derive(Component, Reflect)]
+pub struct RefCharacter;
 
 #[derive(Resource, Reflect, Default)]
 struct TerrainTexture(Handle<Image>);
@@ -44,7 +51,7 @@ struct TerrainTexture(Handle<Image>);
 fn startup(mut commands: Commands, asset_server: Res<AssetServer>, 
     mut terrain_texture: ResMut<TerrainTexture>,
 ) {
-    terrain_texture.0 = asset_server.load("iso_color.png");
+    info!("Starting Iso plugin...");
 }
 
 fn handle_added_iso_cameras(
@@ -68,10 +75,10 @@ fn handle_added_characters(
 
 fn handle_added_terrains(
     mut commands: Commands,
-    mut added_terrains: Query<Entity, Added<Terrain>>,
+    mut added_terrains: Query<(Entity, &Terrain), Added<Terrain>>,
     mut terrain_texture: Res<TerrainTexture>,
 ) {
-    for mut terrain_ent in added_terrains.iter_mut() {
+    for (mut terrain_ent, terrain) in added_terrains.iter_mut() {
         let map_size = TilemapSize { x: MAP_SIZE, y: MAP_SIZE };
         let mut tile_storage = TileStorage::empty(map_size);
 
@@ -98,10 +105,43 @@ fn handle_added_terrains(
             map_type,
             size: map_size,
             storage: tile_storage,
-            texture: TilemapTexture::Single(terrain_texture.0.clone_weak()),
+            texture: TilemapTexture::Single(terrain.texture.clone_weak()),
             tile_size,
             anchor: TilemapAnchor::Center,
             ..default()
         });
     }
 }
+
+fn handle_added_ref_cameras(
+    mut commands: Commands,
+    added_cameras: Query<Entity, Added<RefCamera>>
+) {
+    for cam_ent in added_cameras {
+        commands.entity(cam_ent).insert((
+            Camera3d::default(),
+            Projection::from(OrthographicProjection {
+                scaling_mode: ScalingMode::FixedVertical {
+                    viewport_height: 6.0,
+                },
+                ..OrthographicProjection::default_3d()
+            }),
+            Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y)
+        ));
+    }
+}
+
+fn handle_added_ref_characters(
+    mut commands: Commands,
+    added_characters: Query<Entity, Added<RefCharacter>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for char_ent in added_characters {
+        commands.entity(char_ent).insert((
+            Mesh3d(meshes.add(Cuboid::default())),
+            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.6, 0.7))),
+        ));
+    }
+}
+
