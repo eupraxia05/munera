@@ -7,3 +7,4 @@ edition = "2024"
 bevy = { workspace = true }
 iso = { path = "../iso/" }
 debug = { path = "../debug" }
+bevy_egui = { workspace = true }

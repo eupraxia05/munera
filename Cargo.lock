@@ -4025,6 +4025,7 @@ name = "ref_exporter"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_egui",
  "debug",
  "iso",
 ]
