@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::render::camera::ScalingMode;
-use std::f32::consts::FRAC_PI_2;
 use bevy_ecs_tilemap::prelude::*;
+use bevy::render::camera::RenderTarget;
 
 const MAP_SIZE: u32 = 10;
 
@@ -11,7 +11,6 @@ impl Plugin for IsoPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(TilemapPlugin);
 
-        app.add_systems(Startup, startup);
         app.add_systems(Update, handle_added_characters);
         app.add_systems(Update, handle_added_iso_cameras);
         app.add_systems(Update, handle_added_terrains);
@@ -39,8 +38,10 @@ pub struct Terrain {
     pub texture: Handle<Image>
 }
 
-#[derive(Component, Reflect)]
-pub struct RefCamera;
+#[derive(Component, Reflect, Default)]
+pub struct RefCamera {
+    pub target: RenderTarget,
+}
 
 #[derive(Component, Reflect)]
 pub struct RefCharacter;
@@ -48,17 +49,11 @@ pub struct RefCharacter;
 #[derive(Resource, Reflect, Default)]
 struct TerrainTexture(Handle<Image>);
 
-fn startup(mut commands: Commands, asset_server: Res<AssetServer>, 
-    mut terrain_texture: ResMut<TerrainTexture>,
-) {
-    info!("Starting Iso plugin...");
-}
-
 fn handle_added_iso_cameras(
     mut commands: Commands,
     mut added_iso_cameras: Query<Entity, Added<IsoCamera>>,
 ) {
-    for mut cam_ent in added_iso_cameras.iter_mut() {
+    for cam_ent in added_iso_cameras.iter_mut() {
         commands.entity(cam_ent).insert(Camera2d);
     }
 }
@@ -66,9 +61,8 @@ fn handle_added_iso_cameras(
 fn handle_added_characters(
     mut commands: Commands, 
     mut added_characters: Query<Entity, Added<IsoCharacter>>,
-    asset_server: Res<AssetServer>,
 ) {
-    for mut char_ent in added_characters.iter_mut() {
+    for char_ent in added_characters.iter_mut() {
         commands.entity(char_ent).insert((IsoCharacter, Sprite::default()));
     }
 }
@@ -76,9 +70,8 @@ fn handle_added_characters(
 fn handle_added_terrains(
     mut commands: Commands,
     mut added_terrains: Query<(Entity, &Terrain), Added<Terrain>>,
-    mut terrain_texture: Res<TerrainTexture>,
 ) {
-    for (mut terrain_ent, terrain) in added_terrains.iter_mut() {
+    for (terrain_ent, terrain) in added_terrains.iter_mut() {
         let map_size = TilemapSize { x: MAP_SIZE, y: MAP_SIZE };
         let mut tile_storage = TileStorage::empty(map_size);
 
@@ -115,9 +108,9 @@ fn handle_added_terrains(
 
 fn handle_added_ref_cameras(
     mut commands: Commands,
-    added_cameras: Query<Entity, Added<RefCamera>>
+    added_cameras: Query<(Entity, &RefCamera), Added<RefCamera>>
 ) {
-    for cam_ent in added_cameras {
+    for (cam_ent, cam) in added_cameras {
         commands.entity(cam_ent).insert((
             Camera3d::default(),
             Projection::from(OrthographicProjection {
@@ -126,7 +119,11 @@ fn handle_added_ref_cameras(
                 },
                 ..OrthographicProjection::default_3d()
             }),
-            Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y)
+            Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+            Camera {
+                target: cam.target.clone(),
+                ..default()
+            }
         ));
     }
 }

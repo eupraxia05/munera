@@ -26,3 +26,6 @@ target
 
 # vim swap files
 *.swp
+
+# ref exporter output
+/out
