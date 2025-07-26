@@ -43,8 +43,10 @@ pub struct RefCamera {
     pub target: RenderTarget,
 }
 
-#[derive(Component, Reflect)]
-pub struct RefCharacter;
+#[derive(Component, Reflect, Default)]
+pub struct RefCharacter {
+    pub gltf_path: Option<String>
+}
 
 #[derive(Resource, Reflect, Default)]
 struct TerrainTexture(Handle<Image>);
@@ -63,7 +65,7 @@ fn handle_added_characters(
     mut added_characters: Query<Entity, Added<IsoCharacter>>,
 ) {
     for char_ent in added_characters.iter_mut() {
-        commands.entity(char_ent).insert((IsoCharacter, Sprite::default()));
+        commands.entity(char_ent).insert(Sprite::default());
     }
 }
 
@@ -130,15 +132,17 @@ fn handle_added_ref_cameras(
 
 fn handle_added_ref_characters(
     mut commands: Commands,
-    added_characters: Query<Entity, Added<RefCharacter>>,
+    added_characters: Query<(Entity, &RefCharacter), Changed<RefCharacter>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>
 ) {
-    for char_ent in added_characters {
-        commands.entity(char_ent).insert((
-            Mesh3d(meshes.add(Cuboid::default())),
-            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.6, 0.7))),
-        ));
+    for (char_ent, character) in added_characters {
+        if let Some(gltf_path) = character.gltf_path.clone() {
+            let asset_path = GltfAssetLabel::Scene(0).from_asset(gltf_path);
+            let scene_asset = asset_server.load(asset_path);
+            commands.entity(char_ent).insert(SceneRoot(scene_asset));
+        }
     }
 }
 

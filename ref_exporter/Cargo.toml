@@ -9,3 +9,5 @@ iso = { path = "../iso/" }
 debug = { path = "../debug" }
 bevy_egui = { workspace = true }
 bevy_image_export = "0.13.0"
+bevy_file_dialog = "0.8.0"
+directories = "6.0.0"
