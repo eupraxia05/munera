@@ -2,10 +2,14 @@ use bevy::prelude::*;
 use bevy::window::{WindowResolution, Window, WindowPlugin};
 use debug::DebugPlugin;
 
+pub extern crate iso;
+pub extern crate debug;
+
 pub mod prelude {
     pub use bevy;
-    pub use iso;
-    pub use debug;
+    pub use bevy::prelude::*;
+    pub use crate::iso;
+    pub use crate::debug;
     pub use crate::MuneraPlugin;
 }
 
