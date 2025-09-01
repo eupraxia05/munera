@@ -10,4 +10,4 @@ bevy_egui = "0.35.1"
 bevy_sprite3d = "5.0.0"
 
 [dev-dependencies]
-debug = { path = "../debug" }
+munera = { path = "../munera" }

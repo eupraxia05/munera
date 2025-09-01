@@ -3125,7 +3125,7 @@ dependencies = [
  "bevy_ecs_tilemap",
  "bevy_egui",
  "bevy_sprite3d",
- "debug",
+ "munera",
 ]
 
 [[package]]
@@ -3413,6 +3413,8 @@ name = "munera"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "debug",
+ "iso",
 ]
 
 [[package]]

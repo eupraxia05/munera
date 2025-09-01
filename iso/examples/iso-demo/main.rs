@@ -2,20 +2,13 @@ use bevy::prelude::*;
 use debug::DebugPlugin;
 use bevy_egui::EguiPlugin;
 use bevy::window::{WindowResolution, Window};
-
+use munera::prelude::*;
 use iso::{IsoCharacter, IsoPlugin, IsoCamera, Terrain};
 
 fn main() {
     let mut app = App::new();
 
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            resolution: WindowResolution::new(1280., 720.).with_scale_factor_override(1.),
-            ..default()
-        }),
-        ..default()
-    }))
-        .add_plugins(DebugPlugin)
+    app.add_plugins(MuneraPlugin)
         .add_plugins(IsoPlugin);
 
     app.add_systems(Startup, startup);
