@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::window::{WindowResolution, Window, WindowPlugin};
 use debug::DebugPlugin;
 
+pub extern crate bevy;
 pub extern crate iso;
 pub extern crate debug;
 
